@@ -47,7 +47,9 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
-	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles -Wpen -Cdx/dy\n");
+	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>]\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-D offset traces by <dx>/<dy> [no offset].\n");
+    GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
 
 	if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
 
@@ -163,13 +165,18 @@ int GMT_pssac (void *V_API, int mode, void *args)
 	old_is_world = GMT->current.map.is_world;
 
 	struct GMT_OPTION *opt = NULL;
+    int n_files = 0;
 	for (opt = options; opt; opt = opt->next) {	/* Process all the options given */
         if (opt->option != '<') continue;  /* skip options */
+        n_files++;
+
+	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "Reading SAC file %d: %s\n", n_files, opt->arg);
         SACHEAD hd;
         float *data = NULL;
         double *x = NULL, *y = NULL;
 
         data = read_sac(opt->arg, &hd);
+	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "%s: xmin=%g xmax=%g ymin=%g ymax=%g\n", hd.b, hd.e, hd.depmin, hd.depmax);
         x = GMT_memory(GMT, 0, hd.npts, double);
         y = GMT_memory(GMT, 0, hd.npts, double);
         int i;
