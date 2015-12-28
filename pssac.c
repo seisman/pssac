@@ -6,7 +6,7 @@
 #include "gmt_dev.h"
 #include "sacio.h"
 
-#define GMT_PROG_OPTIONS "-:>BJKOPRUVXYabcdfghipst" GMT_OPT("HMm")  // ???
+#define GMT_PROG_OPTIONS "->BJRPUXYKOVct"
 
 struct PSSAC_CTRL {
 	struct PSSAC_D {	/* -D<dx>/<dy> */
@@ -17,13 +17,15 @@ struct PSSAC_CTRL {
 		bool active;
 		struct GMT_PEN pen;
 	} W;
+    struct PSSAC_G {  /* -G[p|n]+g<fill>+z<zero>+t<t0>/<t1> */
+        bool active[2];
+        struct GMT_FILL fill[2];
+        float zero[2];
+        bool cut[2];
+        float t0[2];
+        float t1[2];
+    } G;
 };
-
-enum Pssac_cliptype {
-	PSSAC_CLIP_REPEAT 	= 0,
-	PSSAC_CLIP_NO_REPEAT,
-	PSSAC_NO_CLIP_REPEAT,
-	PSSAC_NO_CLIP_NO_REPEAT};
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
 	struct PSSAC_CTRL *C;
@@ -32,6 +34,10 @@ void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new c
 
 	/* Initialize values whose defaults are not 0/false/NULL */
 	C->W.pen = GMT->current.setting.map_default_pen;
+
+    C->G.zero[0] = C->G.zero[1] = 0.0;
+    GMT_init_fill (GMT, &C->G.fill[0], 0.0, 0.0, 0.0);  /* default fill black */
+    C->G.fill[1] = C->G.fill[0];
 	return (C);
 }
 
@@ -48,6 +54,8 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
 	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>]\n");
+	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]\n");
+    GMT_Message (API, GMT_TIME_NONE, "\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-D offset traces by <dx>/<dy> [no offset].\n");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
 
@@ -66,7 +74,7 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 	 */
 
 	unsigned int n_errors = 0;
-	int j;
+	int j, k;
 	char txt_a[GMT_LEN256] = {""}, txt_b[GMT_LEN256] = {""};
 	struct GMT_OPTION *opt = NULL;
 	struct GMTAPI_CTRL *API = GMT->parent;
@@ -99,7 +107,40 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 					n_errors++;
 				}
 				break;
-
+            case 'G':      /* phase painting */
+                switch (opt->arg[0]) {
+                    case 'p': j = 1, k = 0; break;
+                    case 'n': j = 1, k = 1; break;
+                    default : j = 0, k = 0; break;
+                }
+                Ctrl->G.active[k] = true;
+                unsigned int pos;
+                char p[GMT_BUFSIZ] = {""};
+                pos = j;
+                while (GMT_getmodopt (GMT, opt->arg, "gtz", &pos, p)) {
+                    switch (p[0]) {
+                        case 'g':  /* fill */
+                            if (GMT_getfill (GMT, &p[1], &Ctrl->G.fill[k])) {
+                                GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -G+g<fill> option.\n");
+                                n_errors++;
+                            }
+                            break;
+                        case 'z':  /* zero */
+                            Ctrl->G.zero[k] = atof (&p[1]);
+                            break;
+                        case 't':  /* +t<t0>/<t1> */
+                            Ctrl->G.cut[k] = true;
+                            if (sscanf (&p[1], "%f/%f", &Ctrl->G.t0[k], &Ctrl->G.t1[k]) != 2) {
+                                GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -G+t<t0>/<t1> option.\n");
+                                n_errors++;
+                            }
+                            break;
+                        default:
+                            GMT_Report (API, GMT_MSG_NORMAL, "Syntax error\n");
+                            break;
+                    }
+                }
+                break;
 			default:	/* Report bad options */
 				n_errors += GMT_default_error (GMT, opt->option);
 				break;
@@ -114,8 +155,61 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 	return (n_errors ? GMT_PARSE_ERROR : GMT_OK);
 }
 
+double linear_interpolate_x (double x0, double y0, double x1, double y1, double y) {
+    return (x1-x0)/(y1-y0)*(y-y0) + x0;
+}
+double linear_interpolate_y (double x0, double y0, double x1, double y1, double x) {
+    return (y1-y0)/(x1-x0)*(x-x0) + y0;
+}
+
 #define bailout(code) {GMT_Free_Options (mode); return (code);}
 #define Return(code) {Free_pssac_Ctrl (GMT, Ctrl); GMT_end_module (GMT, GMT_cpy); bailout (code);}
+
+void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL *PSL, double *x, double *y, int n, int mode)
+{
+    /* mode=0: paint positive phase */
+    /* mode=1: paint negative phase */
+    int i, ii;
+    double *xx = NULL, *yy = NULL;
+    double zero = Ctrl->G.zero[mode];
+    double t0 = Ctrl->G.t0[mode];
+    double t1 = Ctrl->G.t1[mode];
+
+    xx = GMT_memory (GMT, 0, n+2, double);
+    yy = GMT_memory (GMT, 0, n+2, double);
+
+    for (i=0; i<n; i++) {
+        if ((x[i]>t0) && ((mode==0 && y[i]>zero) || (mode==1 && y[i]<zero))) {
+            ii = 0;
+            /* first point of polygon */
+            yy[ii] = zero;
+            if (i==0)
+                xx[ii] = x[i];
+            else
+                xx[ii] = linear_interpolate_x(x[i-1], y[i-1], x[i], y[i], yy[ii]);
+            ii++;
+
+            while((i<n) && (x[i]<t1) && ((mode==0 && y[i]>zero) || (mode==1 && y[i]<zero))) {
+                xx[ii] = x[i];
+                yy[ii] = y[i];
+                i++;
+                ii++;
+            }
+
+            /* last point of polygon */
+            yy[ii] = zero;
+            if (i==n)
+                xx[ii] = x[i-1];
+            else
+                xx[ii] = linear_interpolate_x(x[i-1], y[i-1], x[i], y[i], yy[ii]);
+            ii++;
+
+            if ((GMT->current.plot.n = GMT_geo_to_xy_line(GMT, xx, yy, ii)) < 3) continue;
+            GMT_setfill(GMT, &Ctrl->G.fill[mode], false);
+            PSL_plotpolygon(PSL, GMT->current.plot.x, GMT->current.plot.y, GMT->current.plot.n);
+        }
+    }
+}
 
 int GMT_pssac (void *V_API, int mode, void *args)
 {	/* High-level function that implements the pssac task */
@@ -128,6 +222,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
 	struct GMT_OPTION *options = NULL;
 	struct PSL_CTRL *PSL = NULL;		/* General PSL interal parameters */
 	struct GMTAPI_CTRL *API = GMT_get_API_ptr (V_API);	/* Cast from void to GMTAPI_CTRL pointer */
+
 
 	/*----------------------- Standard module initialization and parsing ----------------------*/
 
@@ -184,6 +279,17 @@ int GMT_pssac (void *V_API, int mode, void *args)
             x[i] = hd.b + i * hd.delta;
             y[i] = data[i];
         }
+
+        for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
+            if (Ctrl->G.active[i]) {
+                if (!Ctrl->G.cut[i]) {
+                    Ctrl->G.t0[i] = x[0];
+                    Ctrl->G.t1[i] = x[hd.npts-1];
+                }
+
+                paint_phase(GMT, Ctrl, PSL, x, y, hd.npts, i);
+            }
+        }
         GMT->current.plot.n = GMT_geo_to_xy_line (GMT, x, y, hd.npts);
         GMT_plot_line (GMT, GMT->current.plot.x, GMT->current.plot.y, GMT->current.plot.pen, GMT->current.plot.n, current_pen.mode);
 
@@ -204,3 +310,4 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
 	Return (GMT_OK);
 }
+
