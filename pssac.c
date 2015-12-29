@@ -29,6 +29,10 @@ struct PSSAC_CTRL {
         bool active;
         char keys[GMT_LEN256];
     } F;
+    struct PSSAC_E { /* -Ea|b|d|k|n<n> */
+        bool active;
+        char keys[2];
+    } E;
 };
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
@@ -57,10 +61,16 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
-	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>] -F[i|q|r]\n");
-	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]\n");
+	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
+	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>]\n");
     GMT_Message (API, GMT_TIME_NONE, "\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-D offset traces by <dx>/<dy> [no offset].\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-E profile type. \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   a: azimuth profile\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   b: back-azimuth profile\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   k: epicentral distance (in km) profile\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   d: epicentral distance (in degree) profile \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   n: traces are numbered from <n> to <n>+N in y-axis, default value of <n> is 0\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-F data preprocess before plotting.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   [i|q|r] can repeat mutiple times, the data processing is determined by the order of the options.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   i: integral.\n");
@@ -109,6 +119,12 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 					Ctrl->D.active = true;
 				}
 				break;
+
+            case 'E':
+                Ctrl->E.active = true;
+                strcpy(Ctrl->E.keys, &opt->arg[0]);
+                break;
+
             case 'F':
                 Ctrl->F.active = true;
                 strcpy(Ctrl->F.keys, &opt->arg[0]);
@@ -306,6 +322,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
         SACHEAD hd;
         float *data = NULL;
         double *x = NULL, *y = NULL;
+        double y0;
 
         data = read_sac(opt->arg, &hd);
 	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "%s: xmin=%g xmax=%g ymin=%g ymax=%g\n", hd.b, hd.e, hd.depmin, hd.depmax);
@@ -319,7 +336,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
         /* deal with -F option */
         for (i=0; Ctrl->F.keys[i]!='\0'; i++) {
-            fprintf(stderr, "OK %c\n", Ctrl->F.keys[i]);
             switch (Ctrl->F.keys[i]) {
                 case 'i': integral(y, hd.delta, hd.npts); hd.npts--; break;
                 case 'q':   sqr(y, hd.npts); break;
@@ -328,13 +344,31 @@ int GMT_pssac (void *V_API, int mode, void *args)
             }
         }
 
+        /* profile */
+        if (Ctrl->E.active) {
+            switch (Ctrl->E.keys[0]) {
+                case 'a': y0 = hd.az; break;
+                case 'b': y0 = hd.baz; break;
+                case 'd': y0 = hd.gcarc; break;
+                case 'k': y0 = hd.dist; break;
+                case 'n':
+                    y0 = n_files - 1;
+                    if (Ctrl->E.keys[1]!='\0')
+                        y0 += atof(&Ctrl->E.keys[1]);
+                    break;
+            }
+        }
+
+        for (i=0; i<hd.npts; i++) {
+            y[i] += y0;
+        }
+
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
             if (Ctrl->G.active[i]) {
                 if (!Ctrl->G.cut[i]) {
                     Ctrl->G.t0[i] = x[0];
                     Ctrl->G.t1[i] = x[hd.npts-1];
                 }
-
                 paint_phase(GMT, Ctrl, PSL, x, y, hd.npts, i);
             }
         }
