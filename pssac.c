@@ -25,6 +25,10 @@ struct PSSAC_CTRL {
         float t0[2];
         float t1[2];
     } G;
+    struct PSSAC_F { /* -Fiqr */
+        bool active;
+        char keys[GMT_LEN256];
+    } F;
 };
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
@@ -53,10 +57,15 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
-	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>]\n");
+	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>] -F[i|q|r]\n");
 	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]\n");
     GMT_Message (API, GMT_TIME_NONE, "\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-D offset traces by <dx>/<dy> [no offset].\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-F data preprocess before plotting.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   [i|q|r] can repeat mutiple times, the data processing is determined by the order of the options.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   i: integral.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   q: square.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   r: remove mean value.\n");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
 
 	if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
@@ -100,6 +109,10 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 					Ctrl->D.active = true;
 				}
 				break;
+            case 'F':
+                Ctrl->F.active = true;
+                strcpy(Ctrl->F.keys, &opt->arg[0]);
+                break;
 			case 'W':		/* Set line attributes */
 				Ctrl->W.active = true;
 				if (opt->arg[0] && GMT_getpen (GMT, &opt->arg[0], &Ctrl->W.pen)) {
@@ -211,6 +224,30 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
     }
 }
 
+void integral (double *y, double delta, int n)
+{
+    int i;
+    y[0] = (y[0]+y[1])*delta/2.0;
+
+    for (i=1; i<n-1; i++)
+        y[i] = y[i-1] + (y[i] + y[i+1]) * delta / 2.0;
+}
+
+void rmean (double *y, int n)
+{
+    int i;
+    double depmen = 0.0;
+    for (i=0; i<n; i++) depmen += y[i];
+    depmen /= n;
+
+    for (i=0; i<n; i++) y[i] -= depmen;
+}
+
+void sqr (double *y, int n) {
+    int i;
+    for (i=0; i<n; i++) y[i] *= y[i];
+}
+
 int GMT_pssac (void *V_API, int mode, void *args)
 {	/* High-level function that implements the pssac task */
 	bool old_is_world;
@@ -280,6 +317,17 @@ int GMT_pssac (void *V_API, int mode, void *args)
             y[i] = data[i];
         }
 
+        /* deal with -F option */
+        for (i=0; Ctrl->F.keys[i]!='\0'; i++) {
+            fprintf(stderr, "OK %c\n", Ctrl->F.keys[i]);
+            switch (Ctrl->F.keys[i]) {
+                case 'i': integral(y, hd.delta, hd.npts); hd.npts--; break;
+                case 'q':   sqr(y, hd.npts); break;
+                case 'r': rmean(y, hd.npts); break;
+                default: break;
+            }
+        }
+
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
             if (Ctrl->G.active[i]) {
                 if (!Ctrl->G.cut[i]) {
@@ -310,4 +358,3 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
 	Return (GMT_OK);
 }
-

@@ -41,11 +41,11 @@ Options for pssac:
 - D: offset traces, `-D<dx>/<dy>`
 - W: pen attribution, `-W<pen>`
 - G: positive/negative phase painting, `-G[p|n][+g<fill>][+z<zero>][+t<t0>/<t1>]`
+- F: data preprocess before plotting, `-F[i|q|r]`
 
 - A
 - C
 - E
-- F
 - H
 - I
 - L
