@@ -1,9 +1,30 @@
+## GMT5-pssac
+
 This is pssac for GMT5.
 
-It is still under heavy development. Do NOT use it now!
+- Works under GMT 5.2.1 only.
+- Still under development. Do **NOT** use it now!
+- Not compatible with old pssac or pssac2 syntax
+- Compatible with GMT5 syntax (Hopefully)
+- More features than old pssac or pssac2 (Hopefully)
 
-Design of Options
-=================
+### How to compile
+
+~~~bash
+git clone https://github.com/seisman/GMT5-pssac.git
+cd GMT5-pssac
+# modify plugindir in Makefile
+make
+sudo make install
+~~~
+
+### Usage
+
+~~~bash
+gmt pssac
+~~~
+
+### Design of Options
 
 Common Options defined by GMT:
 
@@ -43,13 +64,13 @@ Options for pssac:
 - G: positive/negative phase painting, `-G[p|n][+g<fill>][+z<zero>][+t<t0>/<t1>]`
 - F: data preprocess before plotting, `-F[i|q|r]`
 - E: determine profile type, `-Ea|b|k|d|n[<n>]`
+- M: multiple traces, `-Msize[/alpha]`
 
 - A
 - C
 - H
 - I
 - L
-- M
 - N
 - Q
 - S
