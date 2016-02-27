@@ -17,7 +17,7 @@ struct PSSAC_CTRL {
 		bool active;
 		struct GMT_PEN pen;
 	} W;
-    struct PSSAC_G {  /* -G[p|n]+g<fill>+z<zero>+t<t0>/<t1> */
+    struct PSSAC_G {    /* -G[p|n]+g<fill>+z<zero>+t<t0>/<t1> */
         bool active[2];
         struct GMT_FILL fill[2];
         float zero[2];
@@ -25,14 +25,20 @@ struct PSSAC_CTRL {
         float t0[2];
         float t1[2];
     } G;
-    struct PSSAC_F { /* -Fiqr */
+    struct PSSAC_F {    /* -Fiqr */
         bool active;
         char keys[GMT_LEN256];
     } F;
-    struct PSSAC_E { /* -Ea|b|d|k|n<n> */
+    struct PSSAC_E {    /* -Ea|b|d|k|n<n> */
         bool active;
         char keys[2];
     } E;
+    struct PSSAC_M {    /* -M<size>+a<alpha> */
+        bool active;
+        double size;
+        bool relative;
+        double alpha;
+    } M;
 };
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
@@ -76,6 +82,17 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   i: integral.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   q: square.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   r: remove mean value.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-G paint postive or negative phase.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   [p|n]: postive phase or negative phase. repeat to specify differen fill.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +g<fill>: color to fill\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +t<t0>/<t1>: paint between times t0 and t1 only\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +z<zero>: define zero line\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-M<size>+a<alpha>: vertical scaling\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   <size>: each trace will scaled to <size> inch.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   <size>+a<alpha>: \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> < 0, the first trace will be <size> inch, other trace will use the same scale.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> = 0, yscale=size \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> > 0, yscale=size*r^alpha\n");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
 
 	if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
@@ -98,6 +115,10 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 	struct GMT_OPTION *opt = NULL;
 	struct GMTAPI_CTRL *API = GMT->parent;
 
+    unsigned int pos;
+    char p[GMT_BUFSIZ] = {""};
+    pos = 0;
+
 	for (opt = options; opt; opt = opt->next) {	/* Process all the options given */
 
 		switch (opt->option) {
@@ -112,8 +133,7 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 				if ((j = sscanf (opt->arg, "%[^/]/%s", txt_a, txt_b)) < 1) {
 					GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -D option: Give x [and y] offsets\n");
 					n_errors++;
-				}
-				else {
+				} else {
 					Ctrl->D.dx = GMT_to_inch (GMT, txt_a);
 					Ctrl->D.dy = (j == 2) ? GMT_to_inch (GMT, txt_b) : Ctrl->D.dx;
 					Ctrl->D.active = true;
@@ -129,6 +149,28 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
                 Ctrl->F.active = true;
                 strcpy(Ctrl->F.keys, &opt->arg[0]);
                 break;
+
+            case 'M':
+                Ctrl->M.active = true;
+                j = sscanf(opt->arg, "%lf%s", &Ctrl->M.size, txt_a);
+                if (j==0 || j>2) {
+                    GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -M option\n");
+                    n_errors++;
+                }
+                pos = 0;
+                while (GMT_getmodopt(GMT, txt_a, "a", &pos, p)) {
+                    switch (p[0]) {
+                        case 'a':
+                            Ctrl->M.relative = true;
+                            Ctrl->M.alpha = atof (&p[1]);
+                            break;
+                        default:
+                            GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -M<size>+a<alpha> option.\n");
+                            break;
+                    }
+                }
+                break;
+
 			case 'W':		/* Set line attributes */
 				Ctrl->W.active = true;
 				if (opt->arg[0] && GMT_getpen (GMT, &opt->arg[0], &Ctrl->W.pen)) {
@@ -136,6 +178,7 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 					n_errors++;
 				}
 				break;
+
             case 'G':      /* phase painting */
                 switch (opt->arg[0]) {
                     case 'p': j = 1, k = 0; break;
@@ -143,8 +186,6 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
                     default : j = 0, k = 0; break;
                 }
                 Ctrl->G.active[k] = true;
-                unsigned int pos;
-                char p[GMT_BUFSIZ] = {""};
                 pos = j;
                 while (GMT_getmodopt (GMT, opt->arg, "gtz", &pos, p)) {
                     switch (p[0]) {
@@ -165,11 +206,12 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
                             }
                             break;
                         default:
-                            GMT_Report (API, GMT_MSG_NORMAL, "Syntax error\n");
+                            GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -G\n");
                             break;
                     }
                 }
                 break;
+
 			default:	/* Report bad options */
 				n_errors += GMT_default_error (GMT, opt->option);
 				break;
@@ -314,6 +356,8 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
 	struct GMT_OPTION *opt = NULL;
     int n_files = 0;
+    double yscale = 1.0;
+    double y0 = 0.0;
 	for (opt = options; opt; opt = opt->next) {	/* Process all the options given */
         if (opt->option != '<') continue;  /* skip options */
         n_files++;
@@ -322,7 +366,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
         SACHEAD hd;
         float *data = NULL;
         double *x = NULL, *y = NULL;
-        double y0;
 
         data = read_sac(opt->arg, &hd);
 	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "%s: xmin=%g xmax=%g ymin=%g ymax=%g\n", hd.b, hd.e, hd.depmin, hd.depmax);
@@ -353,14 +396,22 @@ int GMT_pssac (void *V_API, int mode, void *args)
                 case 'k': y0 = hd.dist; break;
                 case 'n':
                     y0 = n_files - 1;
-                    if (Ctrl->E.keys[1]!='\0')
-                        y0 += atof(&Ctrl->E.keys[1]);
+                    if (Ctrl->E.keys[1]!='\0') y0 += atof(&Ctrl->E.keys[1]);
                     break;
             }
         }
 
+        /* multiple trace */
+        if (Ctrl->M.active) {
+            if (Ctrl->M.relative && Ctrl->M.alpha>=0) {
+                yscale = pow(fabs(hd.dist), Ctrl->M.alpha) * Ctrl->M.size;
+            } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n_files==1)) {
+                yscale = Ctrl->M.size*fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1])/(hd.depmax-hd.depmin);
+            }
+        }
+
         for (i=0; i<hd.npts; i++) {
-            y[i] += y0;
+            y[i] = y[i]*yscale + y0;
         }
 
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
