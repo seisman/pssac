@@ -9,6 +9,11 @@
 #define GMT_PROG_OPTIONS "->BJRPUXYKOVct"
 
 struct PSSAC_CTRL {
+    struct PSSAC_In {   /* Input files */
+        bool active;
+        char **file;
+        unsigned int n;
+    } In;
 	struct PSSAC_D {	/* -D<dx>/<dy> */
 		bool active;
 		double dx, dy;
@@ -52,6 +57,8 @@ void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new c
     C->G.zero[0] = C->G.zero[1] = 0.0;
     GMT_init_fill (GMT, &C->G.fill[0], 0.0, 0.0, 0.0);  /* default fill black */
     C->G.fill[1] = C->G.fill[0];
+
+    C->In.n = 0;
 	return (C);
 }
 
@@ -67,9 +74,14 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
-	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions sacfiles [-W<pen>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
+	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions <saclistfile>|sacfiles [-W<pen>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
 	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>]\n");
     GMT_Message (API, GMT_TIME_NONE, "\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t<saclistfile> is an ASCII (or stdin). Each record has 1-4 items:\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t            sacfile  x  y   pen\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   sacfile is the name of SAC file to plot\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   x and y is the position of the first point on the map\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   pen is pen attribution for this trace only\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-D offset traces by <dx>/<dy> [no offset].\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-E profile type. \n");
     GMT_Message (API, GMT_TIME_NONE, "\t   a: azimuth profile\n");
@@ -118,13 +130,19 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
     unsigned int pos;
     char p[GMT_BUFSIZ] = {""};
     pos = 0;
+    size_t n_alloc = 0;
 
 	for (opt = options; opt; opt = opt->next) {	/* Process all the options given */
 
 		switch (opt->option) {
 
 			case '<':	/* Skip input files */
-				if (!GMT_check_filearg (GMT, '<', opt->arg, GMT_IN, GMT_IS_DATASET)) n_errors++;
+                Ctrl->In.active = true;
+                if (n_alloc <= Ctrl->In.n)  Ctrl->In.file = GMT_memory (GMT, Ctrl->In.file, n_alloc += GMT_SMALL_CHUNK, char *);
+                if (GMT_check_filearg (GMT, '<', opt->arg, GMT_IN, GMT_IS_DATASET))
+                    Ctrl->In.file[Ctrl->In.n++] = strdup (opt->arg);
+                else
+                    n_errors++;
 				break;
 
 			/* Processes program-specific parameters */
@@ -304,6 +322,70 @@ void sqr (double *y, int n) {
     for (i=0; i<n; i++) y[i] *= y[i];
 }
 
+struct SAC_LIST {
+    char *file;
+    bool position;
+    double x;
+    double y;
+    bool custom_pen;
+    struct GMT_PEN pen;
+};
+
+int init_sac_list (struct GMT_CTRL *GMT, char **files, unsigned int n_files, struct SAC_LIST **list) {
+    unsigned int n = 0, nr;
+
+    struct SAC_LIST *L = NULL;
+
+    if (n_files > 1) {   /* Got a bunch of SAC files */
+        L = GMT_memory (GMT, NULL, n_files, struct SAC_LIST) ;
+        for (n = 0; n < n_files; n++) {
+            L[n].file = strdup (files[n]);
+            L[n].position = false;
+            L[n].custom_pen = false;
+        }
+    } else {    /* Must read a list file */
+        size_t n_alloc = 0;
+        char *line = NULL, pen[GMT_LEN256] = {""}, file[GMT_LEN256] = {""};
+        double x, y;
+        do {
+            if ((line = GMT_Get_Record(GMT->parent, GMT_READ_TEXT, NULL)) == NULL) {
+                if (GMT_REC_IS_ERROR (GMT))   /* Bail if there are any read error */
+                    return (GMT_RUNTIME_ERROR);
+                if (GMT_REC_IS_ANY_HEADER (GMT)) /* skip headers */
+                    continue;
+                if (GMT_REC_IS_EOF(GMT))  /* Reached end of file */
+                    break;
+            }
+
+            nr = sscanf (line, "%s %lf %lf %s", file, &x, &y, pen);
+            if (nr < 1) {
+                GMT_Report (GMT->parent, GMT_MSG_NORMAL, "Read error for sac list file near row %d\n", n);
+                return (EXIT_FAILURE);
+            }
+
+            if (n == n_alloc) L = GMT_malloc (GMT, L, n, &n_alloc, struct SAC_LIST);
+            L[n].file = strdup (file);
+            if (nr>=3) {
+                L[n].position = true;
+                L[n].x = x;
+                L[n].y = y;
+            }
+            if (nr==4) {
+                L[n].custom_pen = true;
+				if (GMT_getpen (GMT, pen, &L[n].pen)) {
+					GMT_pen_syntax (GMT, 'W', "sets pen attributes [Default pen is %s]:", 3);
+				}
+            }
+            n++;
+        } while(true);
+        GMT_reset_meminc (GMT);
+        n_files = n;
+    }
+    *list = L;
+
+    return n_files;
+}
+
 int GMT_pssac (void *V_API, int mode, void *args)
 {	/* High-level function that implements the pssac task */
 	bool old_is_world;
@@ -334,6 +416,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
 	Ctrl = New_pssac_Ctrl (GMT);	/* Allocate and initialize a new control structure */
 	if ((error = GMT_pssac_parse (GMT, Ctrl, options)) != 0) Return (error);
 
+
 	/*---------------------------- This is the pssac main code ----------------------------*/
 
 	GMT_Report (API, GMT_MSG_VERBOSE, "Processing input SAC files\n");
@@ -352,26 +435,70 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
 	old_is_world = GMT->current.map.is_world;
 
-	struct GMT_OPTION *opt = NULL;
-    int n_files = 0;
     double yscale = 1.0;
-    double y0 = 0.0;
-	for (opt = options; opt; opt = opt->next) {	/* Process all the options given */
-        if (opt->option != '<') continue;  /* skip options */
-        n_files++;
+    double y0 = 0.0, x0;
+    struct SAC_LIST *L = NULL;
 
-	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "Reading SAC file %d: %s\n", n_files, opt->arg);
+    if (Ctrl->In.n <= 1) {      /* Got a ASCII file */
+        GMT_Report (API, GMT_MSG_LONG_VERBOSE, "Reading input file\n");
+        if (GMT_Init_IO (API, GMT_IS_TEXTSET, GMT_IS_NONE, GMT_IN, GMT_ADD_DEFAULT, 0, options) != GMT_OK) {    /* Register data input */
+            Return (API->error);
+        }
+        if (GMT_Begin_IO (API, GMT_IS_TEXTSET, GMT_IN, GMT_HEADER_ON) != GMT_OK) {  /* Enables data input and sets access mode */
+            Return (API->error);
+        }
+    }
+    unsigned int n_files;
+    n_files = init_sac_list (GMT, Ctrl->In.file, Ctrl->In.n, &L);
+
+    if (Ctrl->In.n <= 1 && GMT_End_IO (API, GMT_IN, 0) != GMT_OK) { /* Disables further data input */
+        Return (API->error);
+    }
+
+    int n = 0;
+    for (n=0; n < n_files; n++) {  /* Process all SAC files */
+	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "Reading SAC file %d: %s\n", n, L[n].file);
         SACHEAD hd;
         float *data = NULL;
         double *x = NULL, *y = NULL;
 
-        data = read_sac(opt->arg, &hd);
+        data = read_sac(L[n].file, &hd);
 	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "%s: xmin=%g xmax=%g ymin=%g ymax=%g\n", hd.b, hd.e, hd.depmin, hd.depmax);
+
+        /* position of trace */
+        x0 = hd.b;
+        /* profile */
+        if (Ctrl->E.active) {
+            switch (Ctrl->E.keys[0]) {
+                case 'a': y0 = hd.az; break;
+                case 'b': y0 = hd.baz; break;
+                case 'd': y0 = hd.gcarc; break;
+                case 'k': y0 = hd.dist; break;
+                case 'n':
+                    y0 = n - 1;
+                    if (Ctrl->E.keys[1]!='\0') y0 += atof(&Ctrl->E.keys[1]);
+                    break;
+            }
+        }
+        if (L[n].position) {
+            x0 = L[n].x;
+            y0 = L[n].y;
+        }
+
+        /* multiple trace */
+        if (Ctrl->M.active) {
+            if (Ctrl->M.relative && Ctrl->M.alpha>=0) {
+                yscale = pow(fabs(hd.dist), Ctrl->M.alpha) * Ctrl->M.size;
+            } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n==1)) {
+                yscale = Ctrl->M.size*fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1])/(hd.depmax-hd.depmin);
+            }
+        }
+
         x = GMT_memory(GMT, 0, hd.npts, double);
         y = GMT_memory(GMT, 0, hd.npts, double);
         int i;
         for (i=0; i<hd.npts; i++) {
-            x[i] = hd.b + i * hd.delta;
+            x[i] = x0 + i * hd.delta;
             y[i] = data[i];
         }
 
@@ -385,29 +512,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             }
         }
 
-        /* profile */
-        if (Ctrl->E.active) {
-            switch (Ctrl->E.keys[0]) {
-                case 'a': y0 = hd.az; break;
-                case 'b': y0 = hd.baz; break;
-                case 'd': y0 = hd.gcarc; break;
-                case 'k': y0 = hd.dist; break;
-                case 'n':
-                    y0 = n_files - 1;
-                    if (Ctrl->E.keys[1]!='\0') y0 += atof(&Ctrl->E.keys[1]);
-                    break;
-            }
-        }
-
-        /* multiple trace */
-        if (Ctrl->M.active) {
-            if (Ctrl->M.relative && Ctrl->M.alpha>=0) {
-                yscale = pow(fabs(hd.dist), Ctrl->M.alpha) * Ctrl->M.size;
-            } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n_files==1)) {
-                yscale = Ctrl->M.size*fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1])/(hd.depmax-hd.depmin);
-            }
-        }
-
+        /* vertical scaling and shift */
         for (i=0; i<hd.npts; i++) {
             y[i] = y[i]*yscale + y0;
         }
@@ -421,8 +526,17 @@ int GMT_pssac (void *V_API, int mode, void *args)
                 paint_phase(GMT, Ctrl, PSL, x, y, hd.npts, i);
             }
         }
+
         GMT->current.plot.n = GMT_geo_to_xy_line (GMT, x, y, hd.npts);
+        if (L[n].custom_pen) {
+	        current_pen = L[n].pen;
+            GMT_setpen (GMT, &current_pen);
+        }
         GMT_plot_line (GMT, GMT->current.plot.x, GMT->current.plot.y, GMT->current.plot.pen, GMT->current.plot.n, current_pen.mode);
+        if (L[n].custom_pen) {
+	        current_pen = Ctrl->W.pen;
+            GMT_setpen (GMT, &current_pen);
+        }
 
         GMT_free(GMT, x);
         GMT_free(GMT, y);
