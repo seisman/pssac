@@ -87,9 +87,9 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   +g<fill>: color to fill\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +t<t0>/<t1>: paint between times t0 and t1 only\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +z<zero>: define zero line\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t-M<size>+a<alpha>: vertical scaling\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   <size>: each trace will scaled to <size> inch.\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   <size>+a<alpha>: \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-M vertical scaling\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   -M<size>: each trace will scaled to <size> inch.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   -M<size>/<alpha>: \n");
     GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> < 0, the first trace will be <size> inch, other trace will use the same scale.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> = 0, yscale=size \n");
     GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> > 0, yscale=size*r^alpha\n");
@@ -152,22 +152,20 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 
             case 'M':
                 Ctrl->M.active = true;
-                j = sscanf(opt->arg, "%lf%s", &Ctrl->M.size, txt_a);
-                if (j==0 || j>2) {
+                j = sscanf(opt->arg, "%[^/]/%s", txt_a, txt_b);
+                if (j!=1 && j!=2) {
                     GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -M option\n");
                     n_errors++;
                 }
-                pos = 0;
-                while (GMT_getmodopt(GMT, txt_a, "a", &pos, p)) {
-                    switch (p[0]) {
-                        case 'a':
-                            Ctrl->M.relative = true;
-                            Ctrl->M.alpha = atof (&p[1]);
-                            break;
-                        default:
-                            GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -M<size>+a<alpha> option.\n");
-                            break;
-                    }
+                Ctrl->M.size = GMT_to_inch (GMT, txt_a);
+
+                if (strcmp(txt_b, "s") == 0 ) {   /* -Msize/s */
+                    // TODO
+                } else if (strcmp(txt_b, "b") == 0) {  /* -Msize/b */
+                    // TODO
+                } else {  /* -Msize/alpha */
+                    Ctrl->M.relative = true;
+                    Ctrl->M.alpha = atof (txt_b);
                 }
                 break;
 

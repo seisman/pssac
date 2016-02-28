@@ -64,7 +64,7 @@ Options for pssac:
 - G: positive/negative phase painting, `-G[p|n][+g<fill>][+z<zero>][+t<t0>/<t1>]`
 - F: data preprocess before plotting, `-F[i|q|r]`
 - E: determine profile type, `-Ea|b|k|d|n[<n>]`
-- M: vertical scaling, `-M<size>[+a<alpha>]`
+- M: vertical scaling, `-M<size>[/<alpha>]`
 
 - A
 - C
