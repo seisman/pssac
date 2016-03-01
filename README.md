@@ -59,6 +59,7 @@ Common Options defined by GMT:
 
 Options for pssac:
 
+- C: cut data, `-C<t0>/<t1>`
 - D: offset traces, `-D<dx>/<dy>`
 - W: pen attribution, `-W<pen>`
 - G: positive/negative phase painting, `-G[p|n][+g<fill>][+z<zero>][+t<t0>/<t1>]`
@@ -68,7 +69,6 @@ Options for pssac:
 - T: time alignment and shift. `-T+t<n>+r<reduce_vel>+s<shift>`
 
 - A
-- C
 - H
 - I
 - L

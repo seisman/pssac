@@ -14,6 +14,10 @@ struct PSSAC_CTRL {
         char **file;
         unsigned int n;
     } In;
+    struct PSSAC_C {
+        bool active;
+        double t0, t1;
+    } C;
 	struct PSSAC_D {	/* -D<dx>/<dy> */
 		bool active;
 		double dx, dy;
@@ -82,7 +86,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
-	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions <saclistfile>|sacfiles [-W<pen>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
+	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions <saclistfile>|sacfiles [-W<pen>] [-C<t0>/<t1>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
 	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>|u<n>] [-T+t<tmark>+r<reduce_vel>+s<shift>\n");
     GMT_Message (API, GMT_TIME_NONE, "\n");
     GMT_Message (API, GMT_TIME_NONE, "\t<saclistfile> is an ASCII (or stdin). Each record has 1-4 items:\n");
@@ -90,6 +94,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   sacfile is the name of SAC file to plot\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   x and y is the position of the first point on the map\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   pen is pen attribution for this trace only\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-C only read and plot data between t0 and t1.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-D offset traces by <dx>/<dy> [no offset].\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-E profile type. \n");
     GMT_Message (API, GMT_TIME_NONE, "\t   a: azimuth profile\n");
@@ -159,6 +164,14 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 				break;
 
 			/* Processes program-specific parameters */
+
+            case 'C':
+                Ctrl->C.active = true;
+                if ((j = sscanf (opt->arg, "%lf/%lf", &Ctrl->C.t0, &Ctrl->C.t1)) != 2) {
+                    Ctrl->C.t0 = GMT->common.R.wesn[XLO];
+                    Ctrl->C.t1 = GMT->common.R.wesn[XHI];
+                }
+                break;
 
 			case 'D':
 				if ((j = sscanf (opt->arg, "%[^/]/%s", txt_a, txt_b)) < 1) {
@@ -497,7 +510,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
         float *data = NULL;
         double *x = NULL, *y = NULL;
 
-        data = read_sac(L[n].file, &hd);
+        data = read_sac (L[n].file, &hd);
         if (hd.gcarc == SAC_FLOAT_UNDEF) hd.gcarc = hd.dist / 111.195;
         if (hd.dist == SAC_FLOAT_UNDEF) hd.dist = hd.gcarc * 111.195;
 	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "%s: xmin=%g xmax=%g ymin=%g ymax=%g\n", hd.b, hd.e, hd.depmin, hd.depmax);
@@ -511,7 +524,36 @@ int GMT_pssac (void *V_API, int mode, void *args)
             x0 += Ctrl->T.shift;
         }
 
-        /* profile */
+        int i;
+        x = GMT_memory(GMT, 0, hd.npts, double);
+        y = GMT_memory(GMT, 0, hd.npts, double);
+        if (!Ctrl->C.active) {
+            for (i=0; i<hd.npts; i++) {
+                x[i] = x0 + i * hd.delta;
+                y[i] = data[i];
+            }
+        } else {
+            int npts;
+            double t = x0;
+            for (i=0, npts=0; i<hd.npts; i++) {
+                if (t>=Ctrl->C.t0 && t<=Ctrl->C.t1) {
+                    x[npts] = t;
+                    y[npts] = data[i];
+                    npts++;
+                }
+                t += hd.delta;
+            }
+            hd.npts = npts;
+        }
+        hd.depmax=-1.e20; hd.depmin=1.e20; hd.depmen=0.;
+        for(i=0; i<hd.npts; i++){
+            hd.depmax = hd.depmax > data[i] ? hd.depmax : data[i];
+            hd.depmin = hd.depmin < data[i] ? hd.depmin : data[i];
+            hd.depmen += data[i];
+        }
+        hd.depmen = hd.depmen/hd.npts;
+
+        /* determin the Y location */
         unsigned int user = 0; /* default using user0 */
         if (Ctrl->E.active) {
             switch (Ctrl->E.keys[0]) {
@@ -558,14 +600,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
             } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n==1)) {
                 yscale = Ctrl->M.size*fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1])/(hd.depmax-hd.depmin);
             }
-        }
-
-        x = GMT_memory(GMT, 0, hd.npts, double);
-        y = GMT_memory(GMT, 0, hd.npts, double);
-        int i;
-        for (i=0; i<hd.npts; i++) {
-            x[i] = x0 + i * hd.delta;
-            y[i] = data[i];
         }
 
         /* deal with -F option */
