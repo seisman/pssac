@@ -197,19 +197,22 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
             case 'M':
                 Ctrl->M.active = true;
                 j = sscanf(opt->arg, "%[^/]/%s", txt_a, txt_b);
-                if (j!=1 && j!=2) {
+                if (j == 1) { /* -Msize */
+                    Ctrl->M.size = GMT_to_inch (GMT, txt_a);
+                } else if (j == 2) {
+                    if (strcmp(txt_b, "s") == 0 ) {   /* -Msize/s */
+                        // TODO
+                    } else if (strcmp(txt_b, "b") == 0) {  /* -Msize/b */
+                        // TODO
+                    } else {  /* -Msize/alpha */
+                        Ctrl->M.relative = true;
+                        Ctrl->M.alpha = atof (txt_b);
+                        if (Ctrl->M.alpha < 0) Ctrl->M.size = GMT_to_inch (GMT, txt_a);
+                        else Ctrl->M.size = atof (txt_a);
+                    }
+                } else {
                     GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -M option\n");
                     n_errors++;
-                }
-                Ctrl->M.size = GMT_to_inch (GMT, txt_a);
-
-                if (strcmp(txt_b, "s") == 0 ) {   /* -Msize/s */
-                    // TODO
-                } else if (strcmp(txt_b, "b") == 0) {  /* -Msize/b */
-                    // TODO
-                } else {  /* -Msize/alpha */
-                    Ctrl->M.relative = true;
-                    Ctrl->M.alpha = atof (txt_b);
                 }
                 break;
 
@@ -597,7 +600,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
         if (Ctrl->M.active) {
             if (Ctrl->M.relative && Ctrl->M.alpha>=0) {
                 yscale = pow(fabs(hd.dist), Ctrl->M.alpha) * Ctrl->M.size;
-            } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n==1)) {
+            } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n==0)) {
                 yscale = Ctrl->M.size*fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1])/(hd.depmax-hd.depmin);
             }
         }
