@@ -548,11 +548,12 @@ int GMT_pssac (void *V_API, int mode, void *args)
             }
             hd.npts = npts;
         }
+        GMT_free (GMT, data);
         hd.depmax=-1.e20; hd.depmin=1.e20; hd.depmen=0.;
         for(i=0; i<hd.npts; i++){
-            hd.depmax = hd.depmax > data[i] ? hd.depmax : data[i];
-            hd.depmin = hd.depmin < data[i] ? hd.depmin : data[i];
-            hd.depmen += data[i];
+            hd.depmax = hd.depmax > y[i] ? hd.depmax : y[i];
+            hd.depmin = hd.depmin < y[i] ? hd.depmin : y[i];
+            hd.depmen += y[i];
         }
         hd.depmen = hd.depmen/hd.npts;
 
