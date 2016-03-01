@@ -75,7 +75,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
 	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions <saclistfile>|sacfiles [-W<pen>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
-	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>]\n");
+	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>|u<n>]\n");
     GMT_Message (API, GMT_TIME_NONE, "\n");
     GMT_Message (API, GMT_TIME_NONE, "\t<saclistfile> is an ASCII (or stdin). Each record has 1-4 items:\n");
     GMT_Message (API, GMT_TIME_NONE, "\t            sacfile  x  y   pen\n");
@@ -89,6 +89,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   k: epicentral distance (in km) profile\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   d: epicentral distance (in degree) profile \n");
     GMT_Message (API, GMT_TIME_NONE, "\t   n: traces are numbered from <n> to <n>+N in y-axis, default value of <n> is 0\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   u: Y location is determined from header user<n>, default using user0\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-F data preprocess before plotting.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   [i|q|r] can repeat mutiple times, the data processing is determined by the order of the options.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   i: integral.\n");
@@ -463,20 +464,45 @@ int GMT_pssac (void *V_API, int mode, void *args)
         double *x = NULL, *y = NULL;
 
         data = read_sac(L[n].file, &hd);
+        if (hd.gcarc == SAC_FLOAT_UNDEF) hd.gcarc = hd.dist / 111.195;
+        if (hd.dist == SAC_FLOAT_UNDEF) hd.dist = hd.gcarc * 111.195;
 	    GMT_Report (API, GMT_MSG_LONG_VERBOSE, "%s: xmin=%g xmax=%g ymin=%g ymax=%g\n", hd.b, hd.e, hd.depmin, hd.depmax);
 
-        /* position of trace */
-        x0 = hd.b;
+        /* first determin the X location of first point */
+        x0 = hd.b;   /* the default X location is controlled by B value */
+
         /* profile */
+        unsigned int user = 0; /* default using user0 */
         if (Ctrl->E.active) {
             switch (Ctrl->E.keys[0]) {
-                case 'a': y0 = hd.az; break;
-                case 'b': y0 = hd.baz; break;
-                case 'd': y0 = hd.gcarc; break;
-                case 'k': y0 = hd.dist; break;
+                case 'a':
+                    if (hd.az == SAC_FLOAT_UNDEF) GMT_Message (API, GMT_TIME_NONE, "Warning: Header az not defined in %s\n", L[n].file);
+                    y0 = hd.az;
+                    break;
+                case 'b':
+                    if (hd.baz == SAC_FLOAT_UNDEF) GMT_Message (API, GMT_TIME_NONE, "Warning: Header baz not defined in %s\n", L[n].file);
+                    y0 = hd.baz;
+                    break;
+                case 'd':
+                    if (hd.gcarc == SAC_FLOAT_UNDEF) GMT_Message (API, GMT_TIME_NONE, "Warning: Header gcarc not defined in %s", L[n].file);
+                    y0 = hd.gcarc;
+                    break;
+                case 'k':
+                    if (hd.dist == SAC_FLOAT_UNDEF) GMT_Message (API, GMT_TIME_NONE, "Warning: Header dist not defined in %s\n", L[n].file);
+                    y0 = hd.dist;
+                    break;
                 case 'n':
                     y0 = n - 1;
                     if (Ctrl->E.keys[1]!='\0') y0 += atof(&Ctrl->E.keys[1]);
+                    break;
+                case 'u':  /* user0 to user9 */
+                    if (Ctrl->E.keys[1] != '\0')   user = atoi(&Ctrl->E.keys[1]);
+                    y0 = *((float *) &hd + USERN + user);
+                    if (y0 == SAC_FLOAT_UNDEF) GMT_Message (API, GMT_TIME_NONE, "Warning: Header user%d not defined in %s\n", user, L[n].file);
+                    break;
+                default:
+                    GMT_Message (API, GMT_TIME_NONE, "Error: Wrong choice of profile type (d|k|a|b|n) \n");
+                    Return(EXIT_FAILURE);
                     break;
             }
         }
