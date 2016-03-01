@@ -44,6 +44,14 @@ struct PSSAC_CTRL {
         bool relative;
         double alpha;
     } M;
+    struct PSSAC_T {   /* -T+t<n>+r<reduce_vel>+s<shift> */
+        bool active;
+        bool align;
+        int tmark;
+        bool reduce;
+        double reduce_vel;
+        double shift;
+    }T;
 };
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
@@ -75,7 +83,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
 	GMT_Message (API, GMT_TIME_NONE, "usage: pssac standardGMTOptions <saclistfile>|sacfiles [-W<pen>] [-D<dx>/<dy>] [-F[i|q|r]]\n");
-	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>|u<n>]\n");
+	GMT_Message (API, GMT_TIME_NONE, "\t-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>] [-Ea|b|k|d|n<n>|u<n>] [-T+t<tmark>+r<reduce_vel>+s<shift>\n");
     GMT_Message (API, GMT_TIME_NONE, "\n");
     GMT_Message (API, GMT_TIME_NONE, "\t<saclistfile> is an ASCII (or stdin). Each record has 1-4 items:\n");
     GMT_Message (API, GMT_TIME_NONE, "\t            sacfile  x  y   pen\n");
@@ -106,6 +114,10 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> < 0, the first trace will be <size> inch, other trace will use the same scale.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> = 0, yscale=size \n");
     GMT_Message (API, GMT_TIME_NONE, "\t      if <alpha> > 0, yscale=size*r^alpha\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t-T time alignment \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +t<tmark> align all trace along tmark\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +r<reduce_vel> reduce \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +s<shift> shift all traces\n");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
 
 	if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
@@ -224,6 +236,27 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
                             break;
                         default:
                             GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -G\n");
+                            break;
+                    }
+                }
+                break;
+
+            case 'T':
+                pos = 0;
+                Ctrl->T.active = true;
+                Ctrl->T.shift = 0.0;  /* default no shift */
+                while (GMT_getmodopt (GMT, opt->arg, "trs", &pos, p)) {
+                    switch (p[0]) {
+                        case 't':
+                            Ctrl->T.align = true;
+                            Ctrl->T.tmark = atoi (&p[1]);
+                            break;
+                        case 'r':
+                            Ctrl->T.reduce = true;
+                            Ctrl->T.reduce_vel = atof (&p[1]);
+                            break;
+                        case 's':
+                            Ctrl->T.shift = atof (&p[1]);
                             break;
                     }
                 }
@@ -470,6 +503,12 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
         /* first determin the X location of first point */
         x0 = hd.b;   /* the default X location is controlled by B value */
+
+        if (Ctrl->T.active) { /* deal with X position */
+            if (Ctrl->T.align) x0 -= *((float *)&hd + TMARK + Ctrl->T.tmark);
+            if (Ctrl->T.reduce) x0 -= fabs(hd.dist)/Ctrl->T.reduce_vel;
+            x0 += Ctrl->T.shift;
+        }
 
         /* profile */
         unsigned int user = 0; /* default using user0 */

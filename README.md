@@ -65,6 +65,7 @@ Options for pssac:
 - F: data preprocess before plotting, `-F[i|q|r]`
 - E: determine profile type, `-Ea|b|k|d|n[<n>]|u[n]`
 - M: vertical scaling, `-M<size>[/<alpha>]`
+- T: time alignment and shift. `-T+t<n>+r<reduce_vel>+s<shift>`
 
 - A
 - C
@@ -74,7 +75,6 @@ Options for pssac:
 - N
 - Q
 - S
-- T
 - Z
 
 - e
