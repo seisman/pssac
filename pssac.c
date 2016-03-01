@@ -370,7 +370,8 @@ int init_sac_list (struct GMT_CTRL *GMT, char **files, unsigned int n_files, str
 
     struct SAC_LIST *L = NULL;
 
-    if (n_files > 1) {   /* Got a bunch of SAC files */
+    /* Got a bunch of SAC files or one file in SAC format */
+    if (n_files > 1 || (n_files==1 && !issac(files[n]))) {
         L = GMT_memory (GMT, NULL, n_files, struct SAC_LIST) ;
         for (n = 0; n < n_files; n++) {
             L[n].file = strdup (files[n]);
