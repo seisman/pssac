@@ -77,6 +77,9 @@ struct PSSAC_CTRL {
         double reduce_vel;
         double shift;
     }T;
+    struct PSSAC_v {
+        bool active;
+    }v;
 };
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
@@ -162,6 +165,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Option (API, "U,V");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
     GMT_Option (API, "X,c,h,t,.");
+    GMT_Message (API, GMT_TIME_NONE, "\t-v Plot traces vertically.\n");
 
 	return (EXIT_FAILURE);
 }
@@ -315,6 +319,9 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 					n_errors++;
 				}
 				break;
+            case 'v':
+                Ctrl->v.active = true;
+                break;
 
 			default:	/* Report bad options */
 				n_errors += GMT_default_error (GMT, opt->option);
@@ -676,11 +683,22 @@ int GMT_pssac (void *V_API, int mode, void *args)
             y[i] = y[i]*yscale + y0;
         }
 
+        /* swap x and y */
+        if (Ctrl->v.active) {
+            double *xp;
+            xp = GMT_memory(GMT, 0, hd.npts, double);
+            memcpy((void *)xp, (void *)y, hd.npts*sizeof(double));
+            memcpy((void *)y, (void *)x, hd.npts*sizeof(double));
+            memcpy((void *)x, (void *)xp, hd.npts*sizeof(double));
+            GMT_free(GMT, xp);
+        }
+
         GMT->current.plot.n = GMT_geo_to_xy_line (GMT, x, y, hd.npts);
         if (L[n].custom_pen) {
 	        current_pen = L[n].pen;
             GMT_setpen (GMT, &current_pen);
         }
+
         GMT_plot_line (GMT, GMT->current.plot.x, GMT->current.plot.y, GMT->current.plot.pen, GMT->current.plot.n, current_pen.mode);
         if (L[n].custom_pen) {
 	        current_pen = Ctrl->W.pen;
