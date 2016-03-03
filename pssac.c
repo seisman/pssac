@@ -331,9 +331,13 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 }
 
 double linear_interpolate_x (double x0, double y0, double x1, double y1, double y) {
+    if (y<y0 || y>y1) return x1;  // no extrapolation
+    if (y1==y0) return x0;
     return (x1-x0)/(y1-y0)*(y-y0) + x0;
 }
 double linear_interpolate_y (double x0, double y0, double x1, double y1, double x) {
+    if (x<x0 || x>x1) return y1;  // no extrapolation
+    if (x1==x0) return y0;
     return (y1-y0)/(x1-x0)*(x-x0) + y0;
 }
 
@@ -354,7 +358,7 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
     yy = GMT_memory (GMT, 0, n+2, double);
 
     for (i=0; i<n; i++) {
-        if ((x[i]>t0) && ((mode==0 && y[i]>zero) || (mode==1 && y[i]<zero))) {
+        if ((x[i]>=t0) && ((mode==0 && y[i]>=zero) || (mode==1 && y[i]<=zero))) {
             ii = 0;
             /* first point of polygon */
             yy[ii] = zero;
@@ -364,7 +368,7 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
                 xx[ii] = linear_interpolate_x(x[i-1], y[i-1], x[i], y[i], yy[ii]);
             ii++;
 
-            while((i<n) && (x[i]<t1) && ((mode==0 && y[i]>zero) || (mode==1 && y[i]<zero))) {
+            while((i<n) && (x[i]<=t1) && ((mode==0 && y[i]>=zero) || (mode==1 && y[i]<=zero))) {
                 xx[ii] = x[i];
                 yy[ii] = y[i];
                 i++;
@@ -376,7 +380,7 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
             if (i==n)
                 xx[ii] = x[i-1];
             else
-                xx[ii] = linear_interpolate_x(x[i-1], y[i-1], x[i], y[i], yy[ii]);
+                xx[ii] = linear_interpolate_x(x[i], y[i], x[i-1], y[i-1], yy[ii]);
             ii++;
 
             if ((GMT->current.plot.n = GMT_geo_to_xy_line(GMT, xx, yy, ii)) < 3) continue;
