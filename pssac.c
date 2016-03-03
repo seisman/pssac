@@ -1,3 +1,22 @@
+/*--------------------------------------------------------------------
+ *
+ *  Copyright (c) 2016 by Dongdong Tian
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation; version 3 or any later version.
+ *
+ *  This program is distrdeibuted in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  Contact info: seisman.info@gmail.com
+ *--------------------------------------------------------------------*/
+/*
+ * Brief synopsis: psxy will plot seismogram in SAC format on maps
+ */
+
 #define THIS_MODULE_NAME	"pssac"
 #define THIS_MODULE_LIB		"sac"
 #define THIS_MODULE_PURPOSE	"Plot seismograms in SAC format on maps"
