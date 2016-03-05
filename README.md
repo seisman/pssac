@@ -4,6 +4,7 @@ This is pssac for GMT5.
 
 - Works under GMT 5.2.1 only.
 - Still under development, the usage may change.
+- Has unfixed bugs
 - Not compatible with old pssac or pssac2 syntax
 - Compatible with GMT5 syntax (Hopefully)
 - More features than old pssac or pssac2 (Hopefully)
