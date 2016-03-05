@@ -371,15 +371,12 @@ double linear_interpolate_y (double x0, double y0, double x1, double y1, double 
 #define bailout(code) {GMT_Free_Options (mode); return (code);}
 #define Return(code) {Free_pssac_Ctrl (GMT, Ctrl); GMT_end_module (GMT, GMT_cpy); bailout (code);}
 
-void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL *PSL, double *x, double *y, int n, int mode)
+void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL *PSL, double *x, double *y, int n, double zero, double t0, double t1, int mode)
 {
     /* mode=0: paint positive phase */
     /* mode=1: paint negative phase */
     int i, ii;
     double *xx = NULL, *yy = NULL;
-    double zero = Ctrl->G.zero[mode];
-    double t0 = Ctrl->G.t0[mode];
-    double t1 = Ctrl->G.t1[mode];
 
     xx = GMT_memory (GMT, 0, n+2, double);
     yy = GMT_memory (GMT, 0, n+2, double);
@@ -410,9 +407,20 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
                 xx[ii] = linear_interpolate_x(x[i], y[i], x[i-1], y[i-1], yy[ii]);
             ii++;
 
-            if ((GMT->current.plot.n = GMT_geo_to_xy_line(GMT, xx, yy, ii)) < 3) continue;
+            double *xp, *yp;
+            int npts;
+            if (GMT_IS_LINEAR(GMT)) {
+                if ((GMT->current.plot.n = GMT_geo_to_xy_line(GMT, xx, yy, ii)) < 3) continue;
+                xp = GMT->current.plot.x;
+                yp = GMT->current.plot.y;
+                npts = GMT->current.plot.n;
+            } else {
+                xp = xx;
+                yp = yy;
+                npts = ii;
+            }
             GMT_setfill(GMT, &Ctrl->G.fill[mode], false);
-            PSL_plotpolygon(PSL, GMT->current.plot.x, GMT->current.plot.y, GMT->current.plot.n);
+            PSL_plotpolygon(PSL, xp, yp, npts);
         }
     }
     GMT_free (GMT, xx);
@@ -717,6 +725,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             ymax = ymax > y[i] ? ymax : y[i];
             ymin = ymin < y[i] ? ymin : y[i];
         }
+
         GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after scaling: xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, x[0], x[hd.npts-1], ymin, ymax);
 
         /* swap x and y */
@@ -755,7 +764,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
         GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after projecting (in inch): xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, xp[0], xp[npts-1], ymin, ymax);
         if (L[n].custom_pen) {
 	        current_pen = L[n].pen;
-            GMT_setpen (GMT, &current_pen);
+            GMT_setpen (GMT, &L[n].pen);
         }
 
         GMT_plot_line (GMT, xp, yp, plot_pen, npts, current_pen.mode);
@@ -764,13 +773,20 @@ int GMT_pssac (void *V_API, int mode, void *args)
             GMT_setpen (GMT, &current_pen);
         }
 
+
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
+            double zero, t0, t1;
             if (Ctrl->G.active[i]) {
+                zero= Ctrl->G.zero[i]*yscale + y0;
                 if (!Ctrl->G.cut[i]) {
-                    Ctrl->G.t0[i] = x[0];
-                    Ctrl->G.t1[i] = x[hd.npts-1];
+                    t0 = x[0];
+                    t1 = x[hd.npts-1];
+                } else {
+                    t0 = Ctrl->G.t0[i];
+                    t1 = Ctrl->G.t1[i];
                 }
-                paint_phase(GMT, Ctrl, PSL, x, y, hd.npts, i);
+                GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n", L[n].file, zero, t0, t1);
+                paint_phase(GMT, Ctrl, PSL, x, y, npts, zero, t0, t1, i);
             }
         }
 
