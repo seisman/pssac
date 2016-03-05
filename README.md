@@ -65,6 +65,7 @@ Options used by pssac:
 - M: vertical scaling, `-M<size>[/<alpha>]`
 - T: time alignment and shift. `-T+t<n>+r<reduce_vel>+s<shift>`
 - W: pen attribution, `-W<pen>`
+- m: time scaling while plotting on maps, `-m<sec_per_inch>`
 - v: plot traces vertically
 
-Options left for further use: `AHILNQSZejklmquwyz`
+Options left for further use: `AHILNQSZejklquwyz`

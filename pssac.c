@@ -63,8 +63,10 @@ struct PSSAC_CTRL {
     struct PSSAC_M {    /* -M<size>/<alpha> */
         bool active;
         double size;
-        bool relative;
+        bool norm;      /* true if -M<size> */
+        bool scaleALL;  /* true if alpha=0 */
         double alpha;
+        bool dist_scaling; /* true if alpha>=0 */
     } M;
 	struct PSSAC_W {	/* -W<pen> */
 		struct GMT_PEN pen;
@@ -77,6 +79,10 @@ struct PSSAC_CTRL {
         double reduce_vel;
         double shift;
     }T;
+    struct PSSAC_m {
+        bool active;
+        double sec_per_measure;
+    }m;
     struct PSSAC_v {
         bool active;
     }v;
@@ -109,7 +115,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t[%s] [-C[<t0>/<t1>]] [-D<dx>[/<dy>]] [-Ea|b|k|d|n[<n>]|u[<n>]] [-F[i|q|r]]\n", GMT_B_OPT);
     GMT_Message (API, GMT_TIME_NONE, "\t[-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]] [-K] [-M<size>/<alpha>] [-O] [-P]\n");
     GMT_Message (API, GMT_TIME_NONE, "\t[-T+t<tmark>+r<reduce_vel>+s<shift>] [%s] [%s] \n", GMT_U_OPT, GMT_V_OPT);
-    GMT_Message (API, GMT_TIME_NONE, "\t[-W<pen>] [%s] [%s] [%s] \n\t[%s] [%s]\n", GMT_X_OPT, GMT_Y_OPT, GMT_c_OPT, GMT_h_OPT, GMT_t_OPT);
+    GMT_Message (API, GMT_TIME_NONE, "\t[-W<pen>] [%s] [%s] [%s] \n\t[%s] [%s] -m<sec_per_measuer> -v\n", GMT_X_OPT, GMT_Y_OPT, GMT_c_OPT, GMT_h_OPT, GMT_t_OPT);
     GMT_Message (API, GMT_TIME_NONE, "\n");
 
     if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
@@ -165,6 +171,8 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Option (API, "U,V");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
     GMT_Option (API, "X,c,h,t,.");
+    GMT_Message (API, GMT_TIME_NONE, "\t-m Time scaling while plotting on maps.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   <sec_per_measure> is in second per inch.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-v Plot traces vertically.\n");
 
 	return (EXIT_FAILURE);
@@ -270,6 +278,7 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
                 Ctrl->M.active = true;
                 j = sscanf(opt->arg, "%[^/]/%s", txt_a, txt_b);
                 if (j == 1) { /* -Msize */
+                    Ctrl->M.norm = true;
                     Ctrl->M.size = GMT_to_inch (GMT, txt_a);
                 } else if (j == 2) {
                     if (strcmp(txt_b, "s") == 0 ) {   /* -Msize/s */
@@ -277,15 +286,22 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
                     } else if (strcmp(txt_b, "b") == 0) {  /* -Msize/b */
                         // TODO
                     } else {  /* -Msize/alpha */
-                        Ctrl->M.relative = true;
                         Ctrl->M.alpha = atof (txt_b);
-                        if (Ctrl->M.alpha < 0) Ctrl->M.size = GMT_to_inch (GMT, txt_a);
-                        else Ctrl->M.size = atof (txt_a);
+                        if (Ctrl->M.alpha < 0) {
+                            Ctrl->M.scaleALL = true;
+                            Ctrl->M.size = GMT_to_inch (GMT, txt_a);
+                        } else {
+                            Ctrl->M.dist_scaling = true;
+                            Ctrl->M.size = atof (txt_a);
+                        }
                     }
                 } else {
                     GMT_Report (API, GMT_MSG_NORMAL, "Syntax error -M option: -M<size>[/<alpha>]\n");
                     n_errors++;
                 }
+
+                if (GMT_IS_LINEAR(GMT) && (Ctrl->M.norm || Ctrl->M.scaleALL))
+                    Ctrl->M.size *= fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1]);
                 break;
 
             case 'T':
@@ -321,6 +337,10 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 				break;
             case 'v':
                 Ctrl->v.active = true;
+                break;
+            case 'm':
+                Ctrl->m.active = true;
+                Ctrl->m.sec_per_measure = atof(opt->arg);
                 break;
 
 			default:	/* Report bad options */
@@ -573,6 +593,11 @@ int GMT_pssac (void *V_API, int mode, void *args)
         }
         if (hd.gcarc == SAC_FLOAT_UNDEF) hd.gcarc = hd.dist / 111.195;
         if (hd.dist == SAC_FLOAT_UNDEF) hd.dist = hd.gcarc * 111.195;
+        /* Default to plot trace at station locations on geographic maps */
+        if (!GMT_IS_LINEAR(GMT) && L[n].position==false) {
+            L[n].position = true;
+            GMT_geo_to_xy (GMT, hd.stlo, hd.stla, &L[n].x, &L[n].y);
+        }
 
         /* determine the reference time for all times in pssac */
         tref = 0.0;
@@ -602,8 +627,15 @@ int GMT_pssac (void *V_API, int mode, void *args)
         }
 
         /* prepare datas */
+        double dt;
+        if (GMT_IS_LINEAR(GMT)) dt = hd.delta;
+        else if (Ctrl->m.active) dt = hd.delta/Ctrl->m.sec_per_measure;
+        else {
+            GMT_Report (API, GMT_MSG_NORMAL, "Error: -m option is needed in geographic plots.\n");
+            Return(EXIT_FAILURE);
+        }
         for (i=0; i<hd.npts; i++) {
-            x[i] = i * hd.delta;
+            x[i] = i * dt;
             y[i] = data[i];
         }
         GMT_free (GMT, data);
@@ -660,9 +692,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
         /* multiple trace */
         if (Ctrl->M.active) {
-            if (Ctrl->M.relative && Ctrl->M.alpha>=0) {
-                yscale = pow(fabs(hd.dist), Ctrl->M.alpha) * Ctrl->M.size;
-            } else if (!Ctrl->M.relative || (Ctrl->M.alpha<0 && n==0)) {
+            if (Ctrl->M.norm || (Ctrl->M.scaleALL && n==0)) {
                 hd.depmax=-1.e20; hd.depmin=1.e20; hd.depmen=0.;
                 for(i=0; i<hd.npts; i++){
                     hd.depmax = hd.depmax > y[i] ? hd.depmax : y[i];
@@ -670,18 +700,24 @@ int GMT_pssac (void *V_API, int mode, void *args)
                     hd.depmen += y[i];
                 }
                 hd.depmen = hd.depmen/hd.npts;
-
-                yscale = Ctrl->M.size*fabs((GMT->common.R.wesn[YHI]-GMT->common.R.wesn[YLO])/GMT->current.proj.pars[1])/(hd.depmax-hd.depmin);
+                yscale = Ctrl->M.size / (hd.depmax - hd.depmin);
+            } else if (Ctrl->M.dist_scaling) {
+                hd.depmax=-1.e20; hd.depmin=1.e20; hd.depmen=0.;
+                yscale = Ctrl->M.size * pow(fabs(hd.dist), Ctrl->M.alpha);
             }
         }
 
         /* scaling and shift */
         GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: location of trace: (%lf, %lf)\n", L[n].file, x0, y0);
         GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: yscale of trace: %lf\n", L[n].file, yscale);
+        double ymax=-1.0e20, ymin=1.0e20;
         for (i=0; i<hd.npts; i++) {
             x[i] += x0;
             y[i] = y[i]*yscale + y0;
+            ymax = ymax > y[i] ? ymax : y[i];
+            ymin = ymin < y[i] ? ymin : y[i];
         }
+        GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after scaling: xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, x[0], x[hd.npts-1], ymin, ymax);
 
         /* swap x and y */
         if (Ctrl->v.active) {
@@ -693,13 +729,36 @@ int GMT_pssac (void *V_API, int mode, void *args)
             GMT_free(GMT, xp);
         }
 
-        GMT->current.plot.n = GMT_geo_to_xy_line (GMT, x, y, hd.npts);
+        double *xp, *yp;
+        int npts;
+        unsigned int *plot_pen;
+        if (GMT_IS_LINEAR(GMT)) {
+            GMT->current.plot.n = GMT_geo_to_xy_line (GMT, x, y, hd.npts);
+            xp = GMT->current.plot.x;
+            yp = GMT->current.plot.y;
+            npts = GMT->current.plot.n;
+            plot_pen = GMT->current.plot.pen;
+        } else {
+            xp = x;
+            yp = y;
+            npts = hd.npts;
+            plot_pen = GMT_memory (GMT, PSL_DRAW, npts, unsigned int);
+            plot_pen[0] = PSL_MOVE;
+        }
+
+        ymax=-1.0e20, ymin=1.0e20;
+        for (i=0; i<hd.npts; i++) {
+            ymax = ymax > yp[i] ? ymax : yp[i];
+            ymin = ymin < yp[i] ? ymin : yp[i];
+        }
+
+        GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after projecting (in inch): xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, xp[0], xp[npts-1], ymin, ymax);
         if (L[n].custom_pen) {
 	        current_pen = L[n].pen;
             GMT_setpen (GMT, &current_pen);
         }
 
-        GMT_plot_line (GMT, GMT->current.plot.x, GMT->current.plot.y, GMT->current.plot.pen, GMT->current.plot.n, current_pen.mode);
+        GMT_plot_line (GMT, xp, yp, plot_pen, npts, current_pen.mode);
         if (L[n].custom_pen) {
 	        current_pen = Ctrl->W.pen;
             GMT_setpen (GMT, &current_pen);
