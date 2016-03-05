@@ -6,5 +6,5 @@ PS=test-D.ps
 
 gmt pssac -R$R -J$J -B$B seis.sac -K -P > $PS
 gmt pssac -R$R -J$J -B$B seis.sac -Wred -K -O -D0.2c/0.2c >> $PS
-gmt psxy -R$R -J$J -T -K -O >> $PS
+gmt psxy -R$R -J$J -T -O >> $PS
 rm gmt.*
