@@ -1,6 +1,6 @@
 CC = gcc -Wall
 CFLAGS = `gmt-config --cflags` `gdal-config --cflags`
-plugindir = /opt/GMT-5.2.1/lib64/gmt/plugins
+plugindir := $(shell gmt --show-plugindir)
 
 all: pssac.so
 
