@@ -1,0 +1,9 @@
+site_name: pssac for GMT5
+site_url: https://seisman.github.io/GMT5_pssac
+docs_dir: .
+repo_url: https://github.com/seisman/GMT5-pssac
+theme: material
+pages:
+- Introduction: index.md
+- Usage: usage.md
+- Gallery: gallery.md
