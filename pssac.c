@@ -592,7 +592,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
     }
 	GMT_Report (API, GMT_MSG_VERBOSE, "Collecting %ld SAC files to plot.\n", n_files);
 
-    for (n=0; n < n_files; n++) {  /* Process all SAC files */
+    for (n=0; n < n_files; n++) {  /* Loop over all SAC files */
 	    GMT_Report (API, GMT_MSG_VERBOSE, "Plotting SAC file %d: %s\n", n, L[n].file);
 
         if ((read_sac_head (L[n].file, &hd))) {
@@ -607,7 +607,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             GMT_geo_to_xy (GMT, hd.stlo, hd.stla, &L[n].x, &L[n].y);
         }
 
-        /* determine the reference time for all times in pssac */
+        /* -T: determine the reference time for all times in pssac */
         tref = 0.0;
         if (Ctrl->T.active) {
             if (Ctrl->T.align) tref += *((float *)&hd + TMARK + Ctrl->T.tmark);
@@ -634,21 +634,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             x0 = Ctrl->C.t0;
         }
 
-        /* prepare datas */
-        double dt;
-        if (GMT_IS_LINEAR(GMT)) dt = hd.delta;
-        else if (Ctrl->m.active) dt = hd.delta/Ctrl->m.sec_per_measure;
-        else {
-            GMT_Report (API, GMT_MSG_NORMAL, "Error: -m option is needed in geographic plots.\n");
-            Return(EXIT_FAILURE);
-        }
-        for (i=0; i<hd.npts; i++) {
-            x[i] = i * dt;
-            y[i] = data[i];
-        }
-        GMT_free (GMT, data);
-
-        /* determin the Y location */
+        /* -E: determin the Y location */
         unsigned int user = 0; /* default using user0 */
         if (Ctrl->E.active) {
             switch (Ctrl->E.keys[0]) {
@@ -683,12 +669,22 @@ int GMT_pssac (void *V_API, int mode, void *args)
                     break;
             }
         }
-        if (L[n].position) {
-            x0 = L[n].x;
-            y0 = L[n].y;
-        }
 
-        /* deal with -F option */
+        /* prepare datas */
+        double dt;
+        if (GMT_IS_LINEAR(GMT)) dt = hd.delta;
+        else if (Ctrl->m.active) dt = hd.delta/Ctrl->m.sec_per_measure;
+        else {
+            GMT_Report (API, GMT_MSG_NORMAL, "Error: -m option is needed in geographic plots.\n");
+            Return(EXIT_FAILURE);
+        }
+        for (i=0; i<hd.npts; i++) {
+            x[i] = i * dt;
+            y[i] = data[i];
+        }
+        GMT_free (GMT, data);
+
+        /* -F: data preprocess */
         for (i=0; Ctrl->F.keys[i]!='\0'; i++) {
             switch (Ctrl->F.keys[i]) {
                 case 'i': integral(y, hd.delta, hd.npts); hd.npts--; break;
@@ -698,7 +694,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             }
         }
 
-        /* multiple trace */
+        /* -M: determine yscale for multiple traces */
         if (Ctrl->M.active) {
             if (Ctrl->M.norm || (Ctrl->M.scaleALL && n==0)) {
                 hd.depmax=-1.e20; hd.depmin=1.e20; hd.depmen=0.;
@@ -713,23 +709,17 @@ int GMT_pssac (void *V_API, int mode, void *args)
                 hd.depmax=-1.e20; hd.depmin=1.e20; hd.depmen=0.;
                 yscale = Ctrl->M.size * pow(fabs(hd.dist), Ctrl->M.alpha);
             }
+            for (i=0; i<hd.npts; i++) y[i] = y[i]*yscale;
         }
-
-        /* scaling and shift */
-        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: location of trace: (%lf, %lf)\n", L[n].file, x0, y0);
         GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: yscale of trace: %lf\n", L[n].file, yscale);
-        double ymax=-1.0e20, ymin=1.0e20;
-        for (i=0; i<hd.npts; i++) {
-            x[i] += x0;
-            y[i] = y[i]*yscale + y0;
-            ymax = ymax > y[i] ? ymax : y[i];
-            ymin = ymin < y[i] ? ymin : y[i];
-        }
 
-        GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after scaling: xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, x[0], x[hd.npts-1], ymin, ymax);
-
-        /* swap x and y */
+        /* -v: swap x and y */
         if (Ctrl->v.active) {
+            /* swap x0 and y0 */
+            double xy;
+            xy = x0;  x0 = y0;  y0 = xy;
+
+            /* swap arrays */
             double *xp;
             xp = GMT_memory(GMT, 0, hd.npts, double);
             memcpy((void *)xp, (void *)y, hd.npts*sizeof(double));
@@ -737,6 +727,26 @@ int GMT_pssac (void *V_API, int mode, void *args)
             memcpy((void *)x, (void *)xp, hd.npts*sizeof(double));
             GMT_free(GMT, xp);
         }
+
+        /* redefine (X0,Y0) for geographic maps */
+        if (L[n].position) {
+            x0 = L[n].x;
+            y0 = L[n].y;
+        }
+
+        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: location of trace: (%lf, %lf)\n", L[n].file, x0, y0);
+        for (i=0; i<hd.npts; i++) {
+            x[i] += x0;
+            y[i] += y0;
+        }
+
+        /* report xmin, xmax, ymin and ymax */
+        double ymax=-1.0e20, ymin=1.0e20;
+        for (i=0; i<hd.npts; i++) {
+            ymax = ymax > y[i] ? ymax : y[i];
+            ymin = ymin < y[i] ? ymin : y[i];
+        }
+        GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after scaling and shifting : xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, x[0], x[hd.npts-1], ymin, ymax);
 
         double *xp, *yp;
         int npts;
@@ -753,12 +763,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
             npts = hd.npts;
             plot_pen = GMT_memory (GMT, PSL_DRAW, npts, unsigned int);
             plot_pen[0] = PSL_MOVE;
-        }
-
-        ymax=-1.0e20, ymin=1.0e20;
-        for (i=0; i<hd.npts; i++) {
-            ymax = ymax > yp[i] ? ymax : yp[i];
-            ymin = ymin < yp[i] ? ymin : yp[i];
         }
 
         GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: after projecting (in inch): xmin=%lf xmax=%lf ymin=%lf ymax=%lf\n", L[n].file, xp[0], xp[npts-1], ymin, ymax);
