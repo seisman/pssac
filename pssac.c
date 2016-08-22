@@ -68,9 +68,6 @@ struct PSSAC_CTRL {
         double alpha;
         bool dist_scaling; /* true if alpha>=0 */
     } M;
-	struct PSSAC_W {	/* -W<pen> */
-		struct GMT_PEN pen;
-	} W;
     struct PSSAC_T {   /* -T+t<n>+r<reduce_vel>+s<shift> */
         bool active;
         bool align;
@@ -78,14 +75,17 @@ struct PSSAC_CTRL {
         bool reduce;
         double reduce_vel;
         double shift;
-    }T;
+    } T;
+	struct PSSAC_W {	/* -W<pen> */
+		struct GMT_PEN pen;
+	} W;
     struct PSSAC_m {
         bool active;
         double sec_per_measure;
-    }m;
+    } m;
     struct PSSAC_v {
         bool active;
-    }v;
+    } v;
 };
 
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
@@ -153,7 +153,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   If only -G is used, default to fill the positive portion black.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   [p|n] controls the painting of postive portion or negative portion. Repeat -G option to specify fills for different portion.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +g<fill>: color to fill\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   +t<t0>/<t1>: paint traces between t0 and t1 only. The reference time of t0 and t1 is determined by -E option.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +t<t0>/<t1>: paint traces between t0 and t1 only. The reference time of t0 and t1 is determined by -T option.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +z<zero>: define zero line. From <zero> to top is positive portion, from <zero> to bottom is negative portion.\n");
     GMT_Option (API, "K");
     GMT_Message (API, GMT_TIME_NONE, "\t-M Vertical scaling\n");
@@ -460,7 +460,8 @@ struct SAC_LIST {
     struct GMT_PEN pen;
 };
 
-int init_sac_list (struct GMT_CTRL *GMT, char **files, unsigned int n_files, struct SAC_LIST **list) {
+int init_sac_list (struct GMT_CTRL *GMT, char **files, unsigned int n_files, struct SAC_LIST **list)
+{
     unsigned int n = 0, nr;
 
     struct SAC_LIST *L = NULL;
@@ -595,16 +596,9 @@ int GMT_pssac (void *V_API, int mode, void *args)
     for (n=0; n < n_files; n++) {  /* Loop over all SAC files */
 	    GMT_Report (API, GMT_MSG_VERBOSE, "Plotting SAC file %d: %s\n", n, L[n].file);
 
-        if ((read_sac_head (L[n].file, &hd))) {
+        if ((read_sac_head (L[n].file, &hd))) {  /* skip or not */
             GMT_Report (API, GMT_MSG_NORMAL, "Warning: unable to read SAC file %s, skipped.", L[n].file);
             continue;
-        }
-        if (hd.gcarc == SAC_FLOAT_UNDEF) hd.gcarc = hd.dist / 111.195;
-        if (hd.dist == SAC_FLOAT_UNDEF) hd.dist = hd.gcarc * 111.195;
-        /* Default to plot trace at station locations on geographic maps */
-        if (!GMT_IS_LINEAR(GMT) && L[n].position==false) {
-            L[n].position = true;
-            GMT_geo_to_xy (GMT, hd.stlo, hd.stla, &L[n].x, &L[n].y);
         }
 
         /* -T: determine the reference time for all times in pssac */
@@ -616,61 +610,22 @@ int GMT_pssac (void *V_API, int mode, void *args)
         }
         GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: reference time is %lf\n", L[n].file, tref);
 
-        x = GMT_memory(GMT, 0, hd.npts, double);
-        y = GMT_memory(GMT, 0, hd.npts, double);
-
         /* read data and determine X position */
         if (!Ctrl->C.active) {
             if ((data = read_sac (L[n].file, &hd)) == NULL) {
                 GMT_Report (API, GMT_MSG_NORMAL, "Warning: unable to read SAC file %s, skipped.", L[n].file);
                 continue;
             }
-            x0 = hd.b - tref;
         } else {
             if ((data = read_sac_pdw (L[n].file, &hd, 10, tref+Ctrl->C.t0, tref+Ctrl->C.t1)) == NULL) {
                 GMT_Report (API, GMT_MSG_NORMAL, "Warning: unable to read SAC file %s, skipped.", L[n].file);
                 continue;
             }
-            x0 = Ctrl->C.t0;
-        }
-
-        /* -E: determin the Y location */
-        unsigned int user = 0; /* default using user0 */
-        if (Ctrl->E.active) {
-            switch (Ctrl->E.keys[0]) {
-                case 'a':
-                    if (hd.az == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header az not defined in %s\n", L[n].file);
-                    y0 = hd.az;
-                    break;
-                case 'b':
-                    if (hd.baz == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header baz not defined in %s\n", L[n].file);
-                    y0 = hd.baz;
-                    break;
-                case 'd':
-                    if (hd.gcarc == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header gcarc not defined in %s", L[n].file);
-                    y0 = hd.gcarc;
-                    break;
-                case 'k':
-                    if (hd.dist == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header dist not defined in %s\n", L[n].file);
-                    y0 = hd.dist;
-                    break;
-                case 'n':
-                    y0 = n;
-                    if (Ctrl->E.keys[1]!='\0') y0 += atof(&Ctrl->E.keys[1]);
-                    break;
-                case 'u':  /* user0 to user9 */
-                    if (Ctrl->E.keys[1] != '\0') user = atoi(&Ctrl->E.keys[1]);
-                    y0 = *((float *) &hd + USERN + user);
-                    if (y0 == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header user%d not defined in %s\n", user, L[n].file);
-                    break;
-                default:
-                    GMT_Report (API, GMT_MSG_NORMAL, "Error: Wrong choice of profile type (d|k|a|b|n) \n");
-                    Return(EXIT_FAILURE);
-                    break;
-            }
         }
 
         /* prepare datas */
+        x = GMT_memory(GMT, 0, hd.npts, double);
+        y = GMT_memory(GMT, 0, hd.npts, double);
         double dt;
         if (GMT_IS_LINEAR(GMT)) dt = hd.delta;
         else if (Ctrl->m.active) dt = hd.delta/Ctrl->m.sec_per_measure;
@@ -715,10 +670,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
         /* -v: swap x and y */
         if (Ctrl->v.active) {
-            /* swap x0 and y0 */
-            double xy;
-            xy = x0;  x0 = y0;  y0 = xy;
-
             /* swap arrays */
             double *xp;
             xp = GMT_memory(GMT, 0, hd.npts, double);
@@ -728,10 +679,60 @@ int GMT_pssac (void *V_API, int mode, void *args)
             GMT_free(GMT, xp);
         }
 
-        /* redefine (X0,Y0) for geographic maps */
-        if (L[n].position) {
+        /* Default to plot trace at station locations on geographic maps */
+        if (!GMT_IS_LINEAR(GMT) && L[n].position==false) {
+            L[n].position = true;
+            GMT_geo_to_xy (GMT, hd.stlo, hd.stla, &L[n].x, &L[n].y);
+        }
+
+        if (L[n].position) {   /* position (X0,Y0) on plots */
             x0 = L[n].x;
             y0 = L[n].y;
+        } else {
+            /* determine X0 */
+            if (!Ctrl->C.active) x0 = hd.b - tref;
+            else x0 = Ctrl->C.t0;
+
+            /* determin Y0 */
+            unsigned int user = 0; /* default using user0 */
+            if (Ctrl->E.active) {
+                switch (Ctrl->E.keys[0]) {
+                    case 'a':
+                        if (hd.az == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header az not defined in %s\n", L[n].file);
+                        y0 = hd.az;
+                        break;
+                    case 'b':
+                        if (hd.baz == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header baz not defined in %s\n", L[n].file);
+                        y0 = hd.baz;
+                        break;
+                    case 'd':
+                        if (hd.gcarc == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header gcarc not defined in %s", L[n].file);
+                        y0 = hd.gcarc;
+                        break;
+                    case 'k':
+                        if (hd.dist == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header dist not defined in %s\n", L[n].file);
+                        y0 = hd.dist;
+                        break;
+                    case 'n':
+                        y0 = n;
+                        if (Ctrl->E.keys[1]!='\0') y0 += atof(&Ctrl->E.keys[1]);
+                        break;
+                    case 'u':  /* user0 to user9 */
+                        if (Ctrl->E.keys[1] != '\0') user = atoi(&Ctrl->E.keys[1]);
+                        y0 = *((float *) &hd + USERN + user);
+                        if (y0 == SAC_FLOAT_UNDEF) GMT_Report (API, GMT_MSG_NORMAL, "Warning: Header user%d not defined in %s\n", user, L[n].file);
+                        break;
+                    default:
+                        GMT_Report (API, GMT_MSG_NORMAL, "Error: Wrong choice of profile type (d|k|a|b|n) \n");
+                        Return(EXIT_FAILURE);
+                        break;
+                }
+            }
+            if (Ctrl->v.active) {
+                /* swap x0 and y0 */
+                double xy;
+                xy = x0;  x0 = y0;  y0 = xy;
+            }
         }
 
         GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: location of trace: (%lf, %lf)\n", L[n].file, x0, y0);
@@ -776,7 +777,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
 	        current_pen = Ctrl->W.pen;
             GMT_setpen (GMT, &current_pen);
         }
-
 
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
             double zero, t0, t1;

@@ -4,8 +4,6 @@
 
 Contributions are welcomed.
 
-
-
 This is pssac for GMT5.
 
 - Works under GMT 5.2.1 only.
@@ -39,40 +37,3 @@ usage: pssac [<saclist>| <sacfiles>] -J<args> -R<west>/<east>/<south>/<north>[/<
 	[-W<pen>] [-X[a|c|r]<xshift>[<unit>]] [-Y[a|c|r]<yshift>[<unit>]] [-c<ncopies>]
 	[-h[i|o][<nrecs>][+c][+d][+r<remark>][+t<title>]] [-t<+a|[-]n>]
 ~~~
-
-### Design of Options
-
-GMT common options used by pssac:
-
-- B: Specify frame and axes parameters
-- J: Select map projection
-- K: Append more PS later
-- O: This is an overlay plot
-- P: Select portrait orientation
-- R: Specify region of interest
-- U: Plot time-stamp on maps
-- V: verbose mode
-- X: shift plot origin in x-direction
-- Y: shift plot origin in y-direction
-- c: specify the number of copies
-- h: input file have header records
-- t: layer transparency
-
-Possible useful GMT common options: `ip:`
-
-Useless GMT common options: `abdfgonrsx`
-
-Options used by pssac:
-
-- C: cut data, `-C<t0>/<t1>`
-- D: offset traces, `-D<dx>/<dy>`
-- E: determine profile type, `-Ea|b|k|d|n[<n>]|u[n]`
-- F: data preprocess before plotting, `-F[i|q|r]`
-- G: positive/negative phase painting, `-G[p|n][+g<fill>][+z<zero>][+t<t0>/<t1>]`
-- M: vertical scaling, `-M<size>[/<alpha>]`
-- T: time alignment and shift. `-T+t<n>+r<reduce_vel>+s<shift>`
-- W: pen attribution, `-W<pen>`
-- m: time scaling while plotting on maps, `-m<sec_per_inch>`
-- v: plot traces vertically
-
-Options left for further use: `AHILNQSZejklquwyz`

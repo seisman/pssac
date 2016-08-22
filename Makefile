@@ -17,4 +17,4 @@ install: pssac.so
 	install pssac.so $(plugindir)
 
 clean:
-	rm *.o pssac.so
+	rm *.o
