@@ -789,7 +789,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
                     t0 = Ctrl->G.t0[i];
                     t1 = Ctrl->G.t1[i];
                 }
-                GMT_Report (API, GMT_MSG_LONG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n", L[n].file, zero, t0, t1);
+                GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n", L[n].file, zero, t0, t1);
                 paint_phase(GMT, Ctrl, PSL, x, y, npts, zero, t0, t1, i);
             }
         }
