@@ -378,6 +378,13 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
     int i, ii;
     double *xx = NULL, *yy = NULL;
 
+    if (Ctrl->v.active) {
+        double *tmp;
+        tmp = x;
+        x = y;
+        y = tmp;
+    }
+
     xx = GMT_memory (GMT, 0, n+2, double);
     yy = GMT_memory (GMT, 0, n+2, double);
 
@@ -407,6 +414,13 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
                 xx[ii] = linear_interpolate_x(x[i], y[i], x[i-1], y[i-1], yy[ii]);
             ii++;
 
+            if (Ctrl->v.active) {
+                double *tmp;
+                tmp = xx;
+                xx = yy;
+                yy = tmp;
+            }
+
             double *xp, *yp;
             int npts;
             if (GMT_IS_LINEAR(GMT)) {
@@ -420,6 +434,7 @@ void paint_phase(struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct PSL_CTRL 
                 npts = ii;
             }
             GMT_setfill(GMT, &Ctrl->G.fill[mode], false);
+
             PSL_plotpolygon(PSL, xp, yp, npts);
         }
     }
@@ -771,7 +786,6 @@ int GMT_pssac (void *V_API, int mode, void *args)
 	        current_pen = L[n].pen;
             GMT_setpen (GMT, &L[n].pen);
         }
-
         GMT_plot_line (GMT, xp, yp, plot_pen, npts, current_pen.mode);
         if (L[n].custom_pen) {
 	        current_pen = Ctrl->W.pen;
@@ -779,18 +793,22 @@ int GMT_pssac (void *V_API, int mode, void *args)
         }
 
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
-            double zero, t0, t1;
             if (Ctrl->G.active[i]) {
-                zero= Ctrl->G.zero[i]*yscale + y0;
+                if (!Ctrl->v.active) Ctrl->G.zero[i] = Ctrl->G.zero[i]*yscale + y0;
+                else                 Ctrl->G.zero[i] = Ctrl->G.zero[i]*yscale + x0;
+
                 if (!Ctrl->G.cut[i]) {
-                    t0 = x[0];
-                    t1 = x[hd.npts-1];
-                } else {
-                    t0 = Ctrl->G.t0[i];
-                    t1 = Ctrl->G.t1[i];
+                    if (!Ctrl->v.active) {
+                        Ctrl->G.t0[i] = x[0];
+                        Ctrl->G.t1[i] = x[hd.npts-1];
+                    } else {
+                        Ctrl->G.t0[i] = y[0];
+                        Ctrl->G.t1[i] = y[hd.npts-1];
+                    }
                 }
-                GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n", L[n].file, zero, t0, t1);
-                paint_phase(GMT, Ctrl, PSL, x, y, npts, zero, t0, t1, i);
+                GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n",
+                        L[n].file, Ctrl->G.zero[i], Ctrl->G.t0[i], Ctrl->G.t1[i]);
+                paint_phase(GMT, Ctrl, PSL, x, y, npts, Ctrl->G.zero[i], Ctrl->G.t0[i], Ctrl->G.t1[i], i);
             }
         }
 
