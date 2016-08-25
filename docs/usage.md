@@ -1,4 +1,19 @@
+~~~bash
+$ gmt pssac -
+pssac(sac) 5.2.1 (r15220) [64-bit] [MP] - Plot seismograms in SAC format on maps
+
+usage: pssac <saclist>|<sacfiles> -J<args> -R<west>/<east>/<south>/<north>[/<zmin>/<zmax>][r]
+	[-B<args>] [-C[<t0>/<t1>]] [-D<dx>[/<dy>]] [-Ea|b|k|d|n[<n>]|u[<n>]] [-F[i][q][r]]
+	[-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]] [-K] [-M<size>/<alpha>] [-O] [-P]
+	[-T[+t<tmark>][+r<reduce_vel>][+s<shift>]] [-U[<just>/<dx>/<dy>/][c|<label>]] [-V[<level>]]
+	[-W<pen>] [-X[a|c|r]<xshift>[<unit>]] [-Y[a|c|r]<yshift>[<unit>]] [-c<ncopies>]
+	[-h[i|o][<nrecs>][+c][+d][+r<remark>][+t<title>]] [-t<+a|[-]n>] [-m<sec_per_measuer>] [-v]
+~~~
+
 ## GMT common options
+
+pssac use several GMT common options. Please refer to the GMT official documents
+for details.
 
 - `-B`: Specify frame and axes parameters
 - `-J`: Select map projection
@@ -20,13 +35,15 @@
 
 Cut data in timewindow between `<t0>` and `<t1>`.
 
-`<t0>` and `<t1>` are relative to a reference time specified by `-T`. If `-T` option is not specified, use reference time in SAC header instead.
+`<t0>` and `<t1>` are relative to a reference time specified by `-T`.
+If `-T` option is not specified, use reference time in SAC header instead.
 
 If only `-C` is used, `<t0>/<t1>` is determined as `xmin/xmax` from `-R` option.
 
 ### `-D<dx>[/<dy>]`
 
-Offset seismogram locations by the given mount `<dx>/<dy>` [Default is no offset]. If `<dy>` is not given it is set equal to `<dx>`.
+Offset seismogram locations by the given mount `<dx>/<dy>` [Default is no offset].
+If `<dy>` is not given it is set equal to `<dx>`.
 
 ###  `-Ea|b|k|d|n[<n>]|u[<n>]`
 
@@ -39,7 +56,7 @@ Determine profile type (the type of Y axis).
 - `n`: traces are numbered from <n> to <n>+N in y-axis, default value of <n> is 0
 - `u`: Y location is determined from SAC header user<n>, default using user0.
 
-### `-F[i|q|r]`
+### `-F[i][q][r]`
 
 Data preprocess before plotting.
 
@@ -47,7 +64,8 @@ Data preprocess before plotting.
 - `q`: square
 - `r`: remove mean value
 
-`i|q|r` can repeat mutiple times, like -Frii will convert accerate to displacement. The order of i|q|r controls the order of the data processing.
+`i|q|r` can repeat mutiple times. `-Frii` will convert accerate to displacement.
+The order of `i|q|r` controls the order of the data processing.
 
 ### `-G[p|n][+g<fill>][+z<zero>][+t<t0>/<t1>]`
 
@@ -55,7 +73,7 @@ Paint positive or negative portion of traces.
 
 If only `-G` is used, default to fill the positive portion black.
 
-- `[p|n]` controls the painting of postive portion or negative portion. Repeat `-G` option to specify fills for different portion.
+- `[p|n]` controls the painting of postive portion or negative portion. Repeat `-G` option to specify fills for positive and negative portions, respectively.
 - `+g<fill>`: color to fill
 - `+t<t0>/<t1>`: paint traces between t0 and t1 only. The reference time of t0 and t1 is determined by `-T` option.
 - `+z<zero>`: define zero line. From `<zero>` to top is positive portion, from `<zero>` to bottom is negative portion.
@@ -70,7 +88,7 @@ Vertical scaling.
   - `<alpha>` = 0, yscale=size, no unit is allowed.
   - `<alpha>` > 0, yscale=size*r^alpha, r is the distance range in km.
 
-### `-T+t<n>+r<reduce_vel>+s<shift>`
+### `-T[+t<n>][+r<reduce_vel>][+s<shift>]`
 
 Time alignment and shift.
 
