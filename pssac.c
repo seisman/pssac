@@ -800,8 +800,9 @@ int GMT_pssac (void *V_API, int mode, void *args)
 
         for (i=0; i<=1; i++) { /* 0=positive; 1=negative */
             if (Ctrl->G.active[i]) {
-                if (!Ctrl->v.active) Ctrl->G.zero[i] = Ctrl->G.zero[i]*yscale + y0;
-                else                 Ctrl->G.zero[i] = Ctrl->G.zero[i]*yscale + x0;
+                double zero = 0.0;
+                if (!Ctrl->v.active) zero = Ctrl->G.zero[i]*yscale + y0;
+                else                 zero = Ctrl->G.zero[i]*yscale + x0;
 
                 if (!Ctrl->G.cut[i]) {
                     if (!Ctrl->v.active) {
@@ -813,8 +814,8 @@ int GMT_pssac (void *V_API, int mode, void *args)
                     }
                 }
                 GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n",
-                        L[n].file, Ctrl->G.zero[i], Ctrl->G.t0[i], Ctrl->G.t1[i]);
-                paint_phase(GMT, Ctrl, PSL, x, y, npts, Ctrl->G.zero[i], Ctrl->G.t0[i], Ctrl->G.t1[i], i);
+                        L[n].file, zero, Ctrl->G.t0[i], Ctrl->G.t1[i]);
+                paint_phase(GMT, Ctrl, PSL, x, y, npts, zero, Ctrl->G.t0[i], Ctrl->G.t1[i], i);
             }
         }
 
