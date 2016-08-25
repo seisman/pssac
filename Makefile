@@ -1,6 +1,4 @@
-CC = gcc -Wall
 CFLAGS = `gmt-config --cflags` `gdal-config --cflags`
-plugindir := $(shell gmt --show-plugindir)
 
 all: pssac.so
 
@@ -12,9 +10,6 @@ pssac.o: pssac.c
 
 sacio.o: sacio.c
 	$(CC) $^ -c -o $@ -fPIC
-
-install: pssac.so
-	install pssac.so $(plugindir)
 
 clean:
 	rm *.o
