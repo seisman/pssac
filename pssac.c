@@ -12,7 +12,7 @@
  *  GNU Lesser General Public License for more details.
  *
  *  Contact info: seisman.info@gmail.com
- *  Project Home: https://github.com/seisman/GMT5-pssac
+ *  Project Home: https://github.com/seisman/pssac
  *--------------------------------------------------------------------*/
 /*
  * Brief synopsis: pssac will plot seismogram in SAC format on maps
@@ -88,6 +88,16 @@ struct PSSAC_CTRL {
     } v;
 };
 
+struct SAC_LIST {
+    char *file;
+    bool position;
+    double x;
+    double y;
+    bool custom_pen;
+    struct GMT_PEN pen;
+};
+
+
 void *New_pssac_Ctrl (struct GMT_CTRL *GMT) {	/* Allocate and initialize a new control structure */
 	struct PSSAC_CTRL *C;
 
@@ -111,11 +121,11 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
 
 	GMT_show_name_and_purpose (API, THIS_MODULE_LIB, THIS_MODULE_NAME, THIS_MODULE_PURPOSE);
 	if (level == GMT_MODULE_PURPOSE) return (GMT_NOERROR);
-	GMT_Message (API, GMT_TIME_NONE, "usage: pssac [<saclist>| <sacfiles>] %s %s\n", GMT_J_OPT, GMT_Rgeoz_OPT);
-    GMT_Message (API, GMT_TIME_NONE, "\t[%s] [-C[<t0>/<t1>]] [-D<dx>[/<dy>]] [-Ea|b|k|d|n[<n>]|u[<n>]] [-F[i|q|r]]\n", GMT_B_OPT);
+	GMT_Message (API, GMT_TIME_NONE, "usage: pssac <saclist>|<sacfiles> %s %s\n", GMT_J_OPT, GMT_Rgeoz_OPT);
+    GMT_Message (API, GMT_TIME_NONE, "\t[%s] [-C[<t0>/<t1>]] [-D<dx>[/<dy>]] [-Ea|b|k|d|n[<n>]|u[<n>]] [-F[i][q][r]]\n", GMT_B_OPT);
     GMT_Message (API, GMT_TIME_NONE, "\t[-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]] [-K] [-M<size>/<alpha>] [-O] [-P]\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t[-T+t<tmark>+r<reduce_vel>+s<shift>] [%s] [%s] \n", GMT_U_OPT, GMT_V_OPT);
-    GMT_Message (API, GMT_TIME_NONE, "\t[-W<pen>] [%s] [%s] [%s] \n\t[%s] [%s] -m<sec_per_measuer> -v\n", GMT_X_OPT, GMT_Y_OPT, GMT_c_OPT, GMT_h_OPT, GMT_t_OPT);
+    GMT_Message (API, GMT_TIME_NONE, "\t[-T[+t<tmark>][+r<reduce_vel>][+s<shift>]] [%s] [%s] \n", GMT_U_OPT, GMT_V_OPT);
+    GMT_Message (API, GMT_TIME_NONE, "\t[-W<pen>] [%s] [%s] [%s] \n\t[%s] [%s] [-m<sec_per_measuer>] [-v]\n", GMT_X_OPT, GMT_Y_OPT, GMT_c_OPT, GMT_h_OPT, GMT_t_OPT);
     GMT_Message (API, GMT_TIME_NONE, "\n");
 
     if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
@@ -125,9 +135,9 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   Each record has 1, 3 or 4 items:  <filename> [<X> <Y>] [<pen>]. \n");
     GMT_Message (API, GMT_TIME_NONE, "\t   <filename> is the name of SAC file to plot.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   <X> and <Y> are the location of the trace on the plot.\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t      On linear plot, the default <X> is the begin time of SAC file, which will be adjusted if -T option is used, \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t      On linear plots, the default <X> is the begin time of SAC file, which will be adjusted if -T option is used, \n");
     GMT_Message (API, GMT_TIME_NONE, "\t      the default <Y> will be adjusted if -E option is used.\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t      On geographic plot, the default <X> and <Y> are determinted by stlo and stla from SAC header.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t      On geographic plots, the default <X> and <Y> are determinted by stlo and stla from SAC header.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t      The <X> and <Y> given here will override the position determined by command line options.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   If <pen> is given, it will override the pen from -W option for current SAC file only.\n");
     GMT_Option (API, "J-Z,R");
@@ -147,11 +157,11 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t   i: integral\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   q: square\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   r: remove mean value\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   i|q|r can repeat mutiple times, like -Frii will convert accerate to displacement.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   i|q|r can repeat mutiple times. -Frii will convert accerate to displacement.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   The order of i|q|r controls the order of the data processing.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-G Paint postive or negative portion of traces.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   If only -G is used, default to fill the positive portion black.\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   [p|n] controls the painting of postive portion or negative portion. Repeat -G option to specify fills for different portion.\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   [p|n] controls the painting of postive portion or negative portion. Repeat -G option to specify fills for pos/neg portion, respectively.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +g<fill>: color to fill\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +t<t0>/<t1>: paint traces between t0 and t1 only. The reference time of t0 and t1 is determined by -T option.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +z<zero>: define zero line. From <zero> to top is positive portion, from <zero> to bottom is negative portion.\n");
@@ -165,15 +175,16 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t      <alpha> > 0, yscale=size*r^alpha, r is the distance range in km.\n");
     GMT_Option (API, "O,P");
     GMT_Message (API, GMT_TIME_NONE, "\t-T Time alignment. \n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   +t<tmark> align all trace along time mark. <tmark> are -5(b), -3(o), -2(a), 0-9(t0-t9).\n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +t<tmark> align all trace along time mark. Choose <tmark> from -5(b), -3(o), -2(a), 0-9(t0-t9).\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   +r<reduce_vel> reduce velocity in km/s.\n");
-    GMT_Message (API, GMT_TIME_NONE, "\t   +s<shift> shift all traces by <shift> seconds \n");
+    GMT_Message (API, GMT_TIME_NONE, "\t   +s<shift> shift all traces by <shift> seconds.\n");
     GMT_Option (API, "U,V");
     GMT_pen_syntax (API->GMT, 'W', "Set pen attributes [Default pen is %s]:", 0);
-    GMT_Option (API, "X,c,h,t,.");
-    GMT_Message (API, GMT_TIME_NONE, "\t-m Time scaling while plotting on maps.\n");
+    GMT_Option (API, "X,c,h,t");
+    GMT_Message (API, GMT_TIME_NONE, "\t-m Time scaling while plotting on geographic plots.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t   <sec_per_measure> is in second per inch.\n");
     GMT_Message (API, GMT_TIME_NONE, "\t-v Plot traces vertically.\n");
+    GMT_Option (API, ".");
 
 	return (EXIT_FAILURE);
 }
@@ -335,9 +346,11 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
 					n_errors++;
 				}
 				break;
+
             case 'v':
                 Ctrl->v.active = true;
                 break;
+
             case 'm':
                 Ctrl->m.active = true;
                 Ctrl->m.sec_per_measure = atof(opt->arg);
@@ -362,6 +375,7 @@ double linear_interpolate_x (double x0, double y0, double x1, double y1, double 
     if (y1==y0) return x0;
     return (x1-x0)/(y1-y0)*(y-y0) + x0;
 }
+
 double linear_interpolate_y (double x0, double y0, double x1, double y1, double x) {
     if (x<x0 || x>x1) return y1;  // no extrapolation
     if (x1==x0) return y0;
@@ -465,15 +479,6 @@ void sqr (double *y, int n) {
     int i;
     for (i=0; i<n; i++) y[i] *= y[i];
 }
-
-struct SAC_LIST {
-    char *file;
-    bool position;
-    double x;
-    double y;
-    bool custom_pen;
-    struct GMT_PEN pen;
-};
 
 int init_sac_list (struct GMT_CTRL *GMT, char **files, unsigned int n_files, struct SAC_LIST **list)
 {
