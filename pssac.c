@@ -703,6 +703,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
         if (!GMT_IS_LINEAR(GMT) && L[n].position==false) {
             L[n].position = true;
             GMT_geo_to_xy (GMT, hd.stlo, hd.stla, &L[n].x, &L[n].y);
+            GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Geographic location: (%lf, %lf)\n", L[n].file, hd.stlo, hd.stla);
         }
 
         if (L[n].position) {   /* position (X0,Y0) on plots */
