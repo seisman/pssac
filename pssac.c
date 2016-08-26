@@ -46,7 +46,7 @@ struct PSSAC_CTRL {
 	} D;
     struct PSSAC_E {    /* -Ea|b|d|k|n<n>|u<n> */
         bool active;
-        char keys[2];
+        char keys[GMT_LEN256];
     } E;
     struct PSSAC_F {    /* -Fiqr */
         bool active;
@@ -209,7 +209,6 @@ int GMT_pssac_parse (struct GMT_CTRL *GMT, struct PSSAC_CTRL *Ctrl, struct GMT_O
     unsigned int pos = 0;
 
 	for (opt = options; opt; opt = opt->next) {	/* Process all the options given */
-
 		switch (opt->option) {
 
 			case '<':	/* Collect input files */
