@@ -125,7 +125,7 @@ int GMT_pssac_usage (struct GMTAPI_CTRL *API, int level)
     GMT_Message (API, GMT_TIME_NONE, "\t[%s] [-C[<t0>/<t1>]] [-D<dx>[/<dy>]] [-Ea|b|k|d|n[<n>]|u[<n>]] [-F[i][q][r]]\n", GMT_B_OPT);
     GMT_Message (API, GMT_TIME_NONE, "\t[-G[p|n][+g<fill>][+t<t0>/<t1>][+z<zero>]] [-K] [-M<size>/<alpha>] [-O] [-P]\n");
     GMT_Message (API, GMT_TIME_NONE, "\t[-T[+t<tmark>][+r<reduce_vel>][+s<shift>]] [%s] [%s] \n", GMT_U_OPT, GMT_V_OPT);
-    GMT_Message (API, GMT_TIME_NONE, "\t[-W<pen>] [%s] [%s] [%s] \n\t[%s] [%s] [-m<sec_per_measuer>] [-v]\n", GMT_X_OPT, GMT_Y_OPT, GMT_c_OPT, GMT_h_OPT, GMT_t_OPT);
+    GMT_Message (API, GMT_TIME_NONE, "\t[-W<pen>] [%s] [%s] [%s] \n\t[%s] [%s] [-m<sec_per_measure>] [-v]\n", GMT_X_OPT, GMT_Y_OPT, GMT_c_OPT, GMT_h_OPT, GMT_t_OPT);
     GMT_Message (API, GMT_TIME_NONE, "\n");
 
     if (level == GMT_SYNOPSIS) return (EXIT_FAILURE);
@@ -628,7 +628,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             if (Ctrl->T.reduce) tref += fabs(hd.dist)/Ctrl->T.reduce_vel;
             tref -= Ctrl->T.shift;
         }
-        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: reference time is %lf\n", L[n].file, tref);
+        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: reference time is %g\n", L[n].file, tref);
 
         /* read data and determine X position */
         if (!Ctrl->C.active) {
@@ -686,7 +686,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             }
             for (i=0; i<hd.npts; i++) y[i] = y[i]*yscale;
         }
-        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: yscale of trace: %lf\n", L[n].file, yscale);
+        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: yscale of trace: %g\n", L[n].file, yscale);
 
         /* -v: swap x and y */
         if (Ctrl->v.active) {
@@ -703,7 +703,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
         if (!GMT_IS_LINEAR(GMT) && L[n].position==false) {
             L[n].position = true;
             GMT_geo_to_xy (GMT, hd.stlo, hd.stla, &L[n].x, &L[n].y);
-            GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Geographic location: (%lf, %lf)\n", L[n].file, hd.stlo, hd.stla);
+            GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Geographic location: (%g, %g)\n", L[n].file, hd.stlo, hd.stla);
         }
 
         if (L[n].position) {   /* position (X0,Y0) on plots */
@@ -756,7 +756,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
             }
         }
 
-        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: location of trace: (%lf, %lf)\n", L[n].file, x0, y0);
+        GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: location of trace: (%g, %g)\n", L[n].file, x0, y0);
         for (i=0; i<hd.npts; i++) {
             x[i] += x0;
             y[i] += y0;
@@ -813,7 +813,7 @@ int GMT_pssac (void *V_API, int mode, void *args)
                         Ctrl->G.t1[i] = y[hd.npts-1];
                     }
                 }
-                GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Painting traces: zero=%lf t0=%lf t1=%lf\n",
+                GMT_Report (API, GMT_MSG_VERBOSE, "=> %s: Painting traces: zero=%g t0=%g t1=%g\n",
                         L[n].file, zero, Ctrl->G.t0[i], Ctrl->G.t1[i]);
                 paint_phase(GMT, Ctrl, PSL, x, y, npts, zero, Ctrl->G.t0[i], Ctrl->G.t1[i], i);
             }
