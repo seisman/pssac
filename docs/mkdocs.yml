@@ -9,6 +9,6 @@ pages:
 - Gallery: gallery.md
 
 extra:
-  version: '0.1.0'
+  version: '0.1.1'
   author:
     github: 'seisman'
