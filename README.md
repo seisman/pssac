@@ -2,7 +2,7 @@
 
 本项目不再维护。
 
-pssac 已经被加入到 GMT 官方源码中并由 GMT 开发者统一维护。待 GMT 5.3.0 发布之后，用于即可在 GMT 中直接调用 pssac。有任何 bug，请报告到 [GMT Issues 页面](http://gmt.soest.hawaii.edu/projects/gmt/issues)。
+pssac 已经被加入到 GMT 官方源码中并由 GMT 开发者统一维护。待 GMT 5.3.0 发布之后，用户即可在 GMT 中直接调用 pssac。有任何 bug，请报告到 [GMT Issues 页面](http://gmt.soest.hawaii.edu/projects/gmt/issues)。
 
 This project is **NO LONGER** maintained. 
 
